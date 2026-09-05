@@ -1,14 +1,21 @@
 import fs from 'fs';
-import { promises as fsPromises } from 'fs';
-import path, { join } from 'path';
-import { pathToFileURL } from 'url';
+import path from 'path';
 import { proto, getContentType, jidDecode, downloadContentFromMessage } from '@whiskeysockets/baileys';
 
 export const lidCache = new Map<string, string>();
 
+export const decodeJid = (jid: any): string => {
+    if (!jid || typeof jid !== 'string') return '';
+    if (jid.includes(':')) {
+        const decoded = jidDecode(jid);
+        return decoded?.user && decoded?.server ? `${decoded.user}@${decoded.server}` : jid;
+    }
+    return jid;
+};
+
 export const UserJid = (sock: any, chat?: string, jid?: string): string => {
     const targetJid = jid || chat;
-    if (!targetJid) return '';
+    if (!targetJid || typeof targetJid !== 'string') return '';
 
     if (targetJid.endsWith('@s.whatsapp.net') || targetJid.endsWith('@g.us')) {
         return targetJid;
@@ -23,7 +30,7 @@ export const UserJid = (sock: any, chat?: string, jid?: string): string => {
         return lidCache.get(lidNumber)!;
     }
 
-    if (sock && sock.signalRepository && sock.signalRepository.lidMapping) {
+    if (sock?.signalRepository?.lidMapping) {
         try {
             const cachedPn = sock.signalRepository.lidMapping.mappingCache?.get(`lid:${lidNumber}`);
             if (cachedPn) {
@@ -49,15 +56,6 @@ export const UserJid = (sock: any, chat?: string, jid?: string): string => {
     } catch (err) {}
 
     return targetJid;
-};
-
-export const decodeJid = (jid: string): string => {
-    if (!jid) return jid;
-    if (jid.includes(':')) {
-        const decoded = jidDecode(jid);
-        return decoded ? `${decoded.user}@${decoded.server}` : jid;
-    }
-    return jid;
 };
 
 const messageCache = new WeakMap();
