@@ -9,29 +9,45 @@ import P from 'pino';
 import { Boom } from '@hapi/boom';
 import chalk from 'chalk';
 import fs, { promises as fsPromises } from 'fs';
-import path, { join } from 'path';
-import { pathToFileURL } from 'url';
+import path, { join, dirname } from 'path';
+import { fileURLToPath, pathToFileURL } from 'url';
 import readline from 'readline';
 
-import { serialize, commands, Command } from '#simple';
+import { serialize } from '#simple';
 import { loadDB } from '#db';
 import config from '#config';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 (global as any).botName = config?.botName || 'Raiden-WaBot';
 
-const sDir = './Session';
+const sDir = path.join(__dirname, 'Session');
 
-// ==========================================
-// CARGA DIRECTA Y RECURSIVA DE COMANDOS
-// ==========================================
+export interface Command {
+    command: string | string[];
+    description?: string;
+    category?: string;
+    group?: boolean;
+    owner?: boolean;
+    admin?: boolean;
+    botAdmin?: boolean;
+    run: (ctx: any) => Promise<any> | any;
+}
+
+export const commands = new Map<string, Command>();
+
+const pCache = new Set<string>();
+const mStore = new Map<string, any>();
+
 async function cargarComandosDirecto(dir = './commands') {
-    const cmdDir = path.resolve(dir);
+    const cmdDir = path.resolve(__dirname, dir);
     if (!fs.existsSync(cmdDir)) {
         console.log(chalk.yellow(`[ ADVERTENCIA ] La carpeta "${dir}" no existe.`));
         return;
     }
 
-    commands.clear(); // Limpiamos la memoria para recargar
+    commands.clear();
 
     async function getAllFiles(directory: string): Promise<string[]> {
         const entries = await fsPromises.readdir(directory, { withFileTypes: true });
@@ -63,22 +79,19 @@ async function cargarComandosDirecto(dir = './commands') {
                         commands.set(alias.toLowerCase(), cFile);
                     });
                     cargados++;
-                    console.log(chalk.green(`  ✔ Cargado:`), chalk.gray(path.relative(process.cwd(), fullPath)));
+                    console.log(chalk.green(`  ✔ Cargado:`), chalk.gray(path.relative(__dirname, fullPath)));
                 } else {
-                    console.log(chalk.yellow(`  ⚠ Omitido (no exporta 'command' o 'run'):`), chalk.gray(path.relative(process.cwd(), fullPath)));
+                    console.log(chalk.yellow(`  ⚠ Omitido (sin 'command' o 'run'):`), chalk.gray(path.relative(__dirname, fullPath)));
                 }
             } catch (e) {
-                console.error(chalk.red(`  ✖ Error en file ${fullPath}:`), e);
+                console.error(chalk.red(`  ✖ Error en ${fullPath}:`), e);
             }
         })
     );
 
-    console.log(chalk.bold.cyan(`\n[ SYSTEM ] Total de comandos listos en Map: ${commands.size} (Archivos válidos: ${cargados})\n`));
+    console.log(chalk.bold.cyan(`\n[ SYSTEM ] Total de comandos listos: ${commands.size} (Archivos válidos: ${cargados})\n`));
 }
 
-// ==========================================
-// FUNCIONES AUXILIARES DE VINCULACIÓN
-// ==========================================
 const askQuestion = (query: string): Promise<string> => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     return new Promise((resolve) => rl.question(query, (ans) => {
@@ -93,9 +106,6 @@ const displayLoadingMessage = () => {
         `${chalk.bold.white('---> ')} `));
 };
 
-// ==========================================
-// ARRANQUE DEL BOT
-// ==========================================
 async function startBot() {
     loadDB();
     
@@ -173,7 +183,7 @@ async function startBot() {
                 console.log(chalk.cyan('Reconectando en 3 segundos...'));
                 setTimeout(() => startBot(), 3000);
             } else {
-                console.log(chalk.red('Sesión cerrada (loggedOut). Borrando carpeta Session...'));
+                console.log(chalk.red('Sesión cerrada. Borrando carpeta Session...'));
 
                 if (fs.existsSync(sDir)) {
                     try {
@@ -188,63 +198,76 @@ async function startBot() {
         }
     });
 
-    // ==========================================
-    // ESCUCHADOR Y LOGS EN TIEMPO REAL
-    // ==========================================
-    sock.ev.on('messages.upsert', async (chatUpdate) => {
-        if (chatUpdate.type !== 'notify') return;
+    sock.ev.on('messages.upsert', async ({ messages, type }) => {
+        if (type !== 'notify') return;
 
-        for (const rawMsg of chatUpdate.messages) {
-            // LOG DE RED: ¿Llega el mensaje desde la API de Baileys?
-            console.log(chalk.bgMagenta.black(' [RED-EVENT] '), chalk.magenta('Mensaje entrante detectado en el Socket.'));
-
-            const m = serialize(sock, rawMsg);
-            if (!m) {
-                console.log(chalk.yellow('  └─ [OMITIDO] El mensaje no se pudo serializar o es de sistema.'));
-                continue;
-            }
-
-            const texto = m.body?.trim();
-            console.log(chalk.cyan(`  ├─ Emisor: ${m.sender}`));
-            console.log(chalk.cyan(`  ├─ Chat: ${m.chat}`));
-            console.log(chalk.cyan(`  └─ Texto recibido: "${texto}"`));
-
-            if (!texto) continue;
-
-            // Extraemos prefijo y nombre de comando
-            const prefixes = ['.', '#', '/', '!'];
-            const prefix = prefixes.find(p => texto.startsWith(p)) || '';
-            const usedPrefix = prefix;
+        for (const rawMsg of messages) {
+            if (!rawMsg?.message || !rawMsg?.key?.id) continue;
             
-            const args = texto.slice(usedPrefix.length).trim().split(/ +/);
-            const commandName = args.shift()?.toLowerCase() || '';
+            const jid = rawMsg.key.remoteJid || '';
+            if (jid === 'status@broadcast' || jid.endsWith('@broadcast')) continue;
 
-            if (usedPrefix) {
-                console.log(chalk.blue(`  ├─ Buscando comando: "${commandName}" (Prefijo: "${usedPrefix}")`));
-                const cmd = commands.get(commandName);
+            const mId = rawMsg.key.id;
+            if (pCache.has(mId)) continue;
 
-                if (cmd) {
-                    console.log(chalk.bold.green(`  └─ ¡COMANDO ENCONTRADO! Ejecutando handler...`));
-                    try {
-                        await cmd.run({ sock, m, text: args.join(' '), args, command: commandName, usedPrefix });
-                        console.log(chalk.bold.green(`  ✔ Ejecutado con éxito`));
-                    } catch (err) {
-                        console.error(chalk.bold.red(`  ✖ Error ejecutando el comando "${commandName}":`), err);
-                    }
-                } else {
-                    console.log(chalk.bold.red(`  └─ ✖ El comando "${commandName}" NO existe en la lista de comandos cargados.`));
+            pCache.add(mId);
+            mStore.set(mId, rawMsg);
+
+            if (pCache.size > 2000) {
+                const first = pCache.values().next().value;
+                if (first) {
+                    pCache.delete(first);
+                    mStore.delete(first);
                 }
-            } else {
-                console.log(chalk.gray(`  └─ Ignorado (No inicia con prefijo válido: ${prefixes.join(', ')})`));
             }
+
+            queueMicrotask(async () => {
+                try {
+                    console.log(chalk.bgMagenta.black(' [RED-EVENT] '), chalk.magenta('Mensaje procesado en microtask.'));
+
+                    const m = serialize(sock, rawMsg);
+                    if (!m) return;
+
+                    const texto = m.body?.trim();
+                    console.log(chalk.cyan(`  ├─ Emisor: ${m.sender}`));
+                    console.log(chalk.cyan(`  ├─ Chat: ${m.chat}`));
+                    console.log(chalk.cyan(`  └─ Texto recibido: "${texto}"`));
+
+                    if (!texto) return;
+
+                    const prefixes = ['.', '#', '/', '!'];
+                    const prefix = prefixes.find(p => texto.startsWith(p)) || '';
+                    const usedPrefix = prefix;
+
+                    const args = texto.slice(usedPrefix.length).trim().split(/ +/);
+                    const commandName = args.shift()?.toLowerCase() || '';
+
+                    if (usedPrefix) {
+                        console.log(chalk.blue(`  ├─ Buscando comando: "${commandName}"`));
+                        const cmd = commands.get(commandName);
+
+                        if (cmd) {
+                            console.log(chalk.bold.green(`  └─ ¡COMANDO ENCONTRADO! Ejecutando...`));
+                            await cmd.run({ sock, m, text: args.join(' '), args, command: commandName, usedPrefix });
+                            console.log(chalk.bold.green(`  ✔ Ejecutado con éxito`));
+                        } else {
+                            console.log(chalk.bold.red(`  └─ ✖ El comando "${commandName}" NO existe.`));
+                        }
+                    } else {
+                        console.log(chalk.gray(`  └─ Ignorado (sin prefijo válido)`));
+                    }
+                } catch (err) {
+                    console.error(chalk.red('[ ERROR UPSERT ] Error en procesamiento de mensaje:'), err);
+                }
+            });
         }
     });
 
-    // Auto-Reload al guardar archivos en /commands
-    if (fs.existsSync('./commands')) {
-        fs.watch('./commands', { recursive: true }, (_, filename) => {
+    const commandsPath = path.join(__dirname, 'commands');
+    if (fs.existsSync(commandsPath)) {
+        fs.watch(commandsPath, { recursive: true }, (_, filename) => {
             if (filename && (filename.endsWith('.ts') || filename.endsWith('.js'))) {
-                console.log(chalk.yellow(`\n[ AUTO-RELOAD ] Cambio detectado en ${filename}. Recargando comandos...`));
+                console.log(chalk.yellow(`\n[ AUTO-RELOAD ] Cambio detectado en ${filename}. Recargando...`));
                 cargarComandosDirecto('./commands').catch(() => {});
             }
         });
