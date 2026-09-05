@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, mkdirSync } from 'fs';
+import { UserJid } from '#simple';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dbDir = join(__dirname, '../database');
@@ -50,9 +51,7 @@ export const loadDB = () => {
             gacha INTEGER DEFAULT 1,
             economy INTEGER DEFAULT 0,
             adminonly INTEGER DEFAULT 0,
-            antilinks INTEGER DEFAULT 0,
-            characters TEXT DEFAULT '{}',
-            rolls TEXT DEFAULT '{}'
+            antilinks INTEGER DEFAULT 0
         );
 
         CREATE TABLE IF NOT EXISTS chat_users (
@@ -67,10 +66,13 @@ export const loadDB = () => {
             afk INTEGER DEFAULT -1,
             afkReason TEXT DEFAULT '',
             characters TEXT DEFAULT '[]',
-            stats TEXT DEFAULT '{}',
             PRIMARY KEY (chat_id, user_id)
         );
     `);
+
+    try { db.exec("ALTER TABLE chats ADD COLUMN characters TEXT DEFAULT '{}'"); } catch {}
+    try { db.exec("ALTER TABLE chats ADD COLUMN rolls TEXT DEFAULT '{}'"); } catch {}
+    try { db.exec("ALTER TABLE chat_users ADD COLUMN stats TEXT DEFAULT '{}'"); } catch {}
 
     stmtSaveUser = db.prepare(`
         INSERT INTO users (id, name, exp, level, usedcommands, description, marry, genre, birth)
@@ -224,47 +226,54 @@ export const saveDB = (chatId?: string, senderId?: string) => {
 export const isNumber = (x: any): boolean => typeof x === 'number' && !isNaN(x);
 
 export const registerData = async (sock: any, m: any) => {
-    if (!m.sender || !m.chat || m.chat === 'undefined' || m.chat === 'status@broadcast') return;
+    try {
+        if (!m.sender || !m.chat || m.chat === 'undefined' || m.chat === 'status@broadcast') return;
 
-    let sender = m.sender.split('@')[0].split(':')[0] + '@s.whatsapp.net';
+        let rawSender = await UserJid(sock, m.chat, m.sender);
+        if (!rawSender) return;
 
-    const user = (global as any).db.data.users[sender] ||= {};
-    if (m.pushName && user.name !== m.pushName) user.name = m.pushName;
-    user.name ??= 'Usuario';
-    user.exp = isNumber(user.exp) ? user.exp : 0;
-    user.level = isNumber(user.level) ? user.level : 0;
-    user.usedcommands = isNumber(user.usedcommands) ? user.usedcommands : 0;
-    user.description ??= '';
-    user.marry ??= '';
-    user.genre ??= '';
-    user.birth ??= '';
+        let sender = rawSender.split('@')[0] + '@s.whatsapp.net';
 
-    const chat = (global as any).db.data.chats[m.chat] ||= {};
-    chat.users ||= {};
-    chat.characters ||= {};
-    chat.rolls ||= {};
-    chat.muteds ??= [];
-    chat.isBanned ??= false;
-    chat.welcome ??= false;
-    chat.bye ??= false;
-    chat.nsfw ??= false;
-    chat.alerts ??= false;
-    chat.gacha ??= true;
-    chat.economy ??= false;
-    chat.adminonly ??= false;
-    chat.antilinks ??= false;
+        const user = (global as any).db.data.users[sender] ||= {};
+        if (m.pushName && user.name !== m.pushName) user.name = m.pushName;
+        user.name ??= 'Usuario';
+        user.exp = isNumber(user.exp) ? user.exp : 0;
+        user.level = isNumber(user.level) ? user.level : 0;
+        user.usedcommands = isNumber(user.usedcommands) ? user.usedcommands : 0;
+        user.description ??= '';
+        user.marry ??= '';
+        user.genre ??= '';
+        user.birth ??= '';
 
-    chat.users[sender] ||= {};
-    chat.users[sender].messageCount = (chat.users[sender].messageCount || 0) + 1;
-    chat.users[sender].lastSeen = Date.now();
-    chat.users[sender].stats ||= {};
-    chat.users[sender].usedTime ??= null;
-    chat.users[sender].lastCmd = isNumber(chat.users[sender].lastCmd) ? chat.users[sender].lastCmd : 0;
-    chat.users[sender].coins = isNumber(chat.users[sender].coins) ? chat.users[sender].coins : 0;
-    chat.users[sender].bank = isNumber(chat.users[sender].bank) ? chat.users[sender].bank : 0;
-    chat.users[sender].afk = isNumber(chat.users[sender].afk) ? chat.users[sender].afk : -1;
-    chat.users[sender].afkReason ??= '';
-    chat.users[sender].characters = Array.isArray(chat.users[sender].characters) ? chat.users[sender].characters : [];
+        const chat = (global as any).db.data.chats[m.chat] ||= {};
+        chat.users ||= {};
+        chat.characters ||= {};
+        chat.rolls ||= {};
+        chat.muteds ??= [];
+        chat.isBanned ??= false;
+        chat.welcome ??= false;
+        chat.bye ??= false;
+        chat.nsfw ??= false;
+        chat.alerts ??= false;
+        chat.gacha ??= true;
+        chat.economy ??= false;
+        chat.adminonly ??= false;
+        chat.antilinks ??= false;
 
-    saveDB(m.chat, sender);
+        chat.users[sender] ||= {};
+        chat.users[sender].messageCount = (chat.users[sender].messageCount || 0) + 1;
+        chat.users[sender].lastSeen = Date.now();
+        chat.users[sender].stats ||= {};
+        chat.users[sender].usedTime ??= null;
+        chat.users[sender].lastCmd = isNumber(chat.users[sender].lastCmd) ? chat.users[sender].lastCmd : 0;
+        chat.users[sender].coins = isNumber(chat.users[sender].coins) ? chat.users[sender].coins : 0;
+        chat.users[sender].bank = isNumber(chat.users[sender].bank) ? chat.users[sender].bank : 0;
+        chat.users[sender].afk = isNumber(chat.users[sender].afk) ? chat.users[sender].afk : -1;
+        chat.users[sender].afkReason ??= '';
+        chat.users[sender].characters = Array.isArray(chat.users[sender].characters) ? chat.users[sender].characters : [];
+
+        saveDB(m.chat, sender);
+    } catch (e) {
+        console.error('Error en registerData:', e);
+    }
 };
