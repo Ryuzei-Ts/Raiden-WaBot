@@ -128,14 +128,14 @@ async function startBot() {
         }
     });
 
-    sock.ev.on('messages.upsert', (chatUpdate) => {
+    sock.ev.on('messages.upsert', async (chatUpdate) => {
         if (chatUpdate.type !== 'notify') return;
         
         const msgs = chatUpdate.messages;
         if (!msgs || !msgs.length) return;
 
-        for (let i = 0; i < msgs.length; i++) {
-            handler(sock, msgs[i]);
+        for (const rawMsg of msgs) {
+            await handler(sock, rawMsg);
         }
     });
 
