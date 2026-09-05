@@ -29,22 +29,18 @@ const getAdmins = (participants: any[] = []) => {
     }
 };
 
-const checkAdmin = (sock: any, from: string, sender: string) => {
+const checkAdmin = async (sock: any, from: string, sender: string) => {
     if (!from || !from.endsWith('@g.us')) {
-        return Promise.resolve({ isUserAdmin: false, isBotAdmin: false });
+        return { isUserAdmin: false, isBotAdmin: false };
     }
 
-    const cachedMeta = getGroupMeta(from);
-    const metaPromise = cachedMeta 
-        ? Promise.resolve(cachedMeta)
-        : sock.groupMetadata(from)
-            .then((metadata: any) => {
-                if (metadata) setGroupMeta(from, metadata);
-                return metadata;
-            })
-            .catch(() => null);
+    try {
+        let metadata = getGroupMeta(from);
+        if (!metadata) {
+            metadata = await sock.groupMetadata(from);
+            if (metadata) setGroupMeta(from, metadata);
+        }
 
-    return metaPromise.then((metadata: any) => {
         if (!metadata || !Array.isArray(metadata.participants)) {
             return { isUserAdmin: false, isBotAdmin: false };
         }
@@ -63,10 +59,12 @@ const checkAdmin = (sock: any, from: string, sender: string) => {
         const isBotAdmin = admins.some(admin => admin === botId || (botLid && admin === botLid));
 
         return { isUserAdmin, isBotAdmin };
-    }).catch(() => ({ isUserAdmin: false, isBotAdmin: false }));
+    } catch {
+        return { isUserAdmin: false, isBotAdmin: false };
+    }
 };
 
-export const handler = (sock: any, rawMsg: any) => {
+export const handler = async (sock: any, rawMsg: any) => {
     try {
         const msg = serialize(sock, rawMsg);
         if (!msg || !msg.body) return;
@@ -104,58 +102,50 @@ export const handler = (sock: any, rawMsg: any) => {
             return;
         }
 
-        const executeCommand = (isUserAdmin = false, isBotAdmin = false) => {
-            const ctx = {
-                ...msg,
-                sock,
-                m: msg,
-                msg,
-                args,
-                command: commandName,
-                prefix,
-                owner: isOwner,
-                admin: isUserAdmin,
-                botAdmin: isBotAdmin,
-                type: msg.type,
-                body: msg.body,
-                chat: msg.chat,
-                sender: msg.sender,
-                from: msg.from,
-                isGroup: msg.isGroup,
-                quoted: msg.quoted,
-                reply: msg.reply,
-                edit: (text: string, key: any) => {
-                    return sock.sendMessage(msg.chat, { text, edit: key });
-                }
-            };
+        let isUserAdmin = false;
+        let isBotAdmin = false;
 
-            try {
-                const res = cmd.run(ctx);
-                if (res && typeof res.catch === 'function') {
-                    res.catch((err: any) => console.error('Error en comando async:', err));
-                }
-            } catch (err) {
-                console.error('Error en comando sync:', err);
+        if (msg.isGroup && (cmd.admin || cmd.botAdmin)) {
+            const adminStatus = await checkAdmin(sock, msg.chat, msg.sender);
+            isUserAdmin = adminStatus.isUserAdmin;
+            isBotAdmin = adminStatus.isBotAdmin;
+
+            if (cmd.admin && !isUserAdmin && !isOwner) {
+                msg.reply('❌ Necesitas ser administrador del grupo para usar este comando.');
+                return;
+            }
+
+            if (cmd.botAdmin && !isBotAdmin) {
+                msg.reply('❌ El bot necesita ser administrador del grupo para ejecutar este comando.');
+                return;
+            }
+        }
+
+        const ctx = {
+            ...msg,
+            sock,
+            m: msg,
+            msg,
+            args,
+            command: commandName,
+            prefix,
+            owner: isOwner,
+            admin: isUserAdmin,
+            botAdmin: isBotAdmin,
+            type: msg.type,
+            body: msg.body,
+            chat: msg.chat,
+            sender: msg.sender,
+            from: msg.from,
+            isGroup: msg.isGroup,
+            quoted: msg.quoted,
+            reply: msg.reply,
+            edit: (text: string, key: any) => {
+                return sock.sendMessage(msg.chat, { text, edit: key });
             }
         };
 
-        if (msg.isGroup && (cmd.admin || cmd.botAdmin)) {
-            checkAdmin(sock, msg.chat, msg.sender).then(({ isUserAdmin, isBotAdmin }) => {
-                if (cmd.admin && !isUserAdmin && !isOwner) {
-                    msg.reply('❌ Necesitas ser administrador del grupo para usar este comando.');
-                    return;
-                }
-
-                if (cmd.botAdmin && !isBotAdmin) {
-                    msg.reply('❌ El bot necesita ser administrador del grupo para ejecutar este comando.');
-                    return;
-                }
-
-                executeCommand(isUserAdmin, isBotAdmin);
-            });
-        } else {
-            executeCommand();
-        }
+        await Promise.resolve(cmd.run(ctx));
 
     } catch (e) {
         console.error('Error en handler:', e);
