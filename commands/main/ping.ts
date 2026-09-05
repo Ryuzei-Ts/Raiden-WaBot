@@ -3,21 +3,15 @@ export default {
     description: 'Verifica la velocidad de respuesta del bot',
     category: 'main',
     group: true,
-    run: async (ctx: any) => {
+    run: (ctx: any) => {
         const jid = ctx.chat || ctx.m?.chat;
         if (!jid) return;
 
-        const start = Date.now();
-        const init = await ctx.sock.sendMessage(jid, { text: 'ꕤ Calculando...' }, { quoted: ctx.m });
+        const timestamp = ctx.m?.messageTimestamp;
+        const latency = timestamp ? Math.max(0, Date.now() - (timestamp * 1000)) : 0;
 
-        const realLatency = Date.now() - start;
-        const latency = realLatency * 0.05;
-
-        if (init?.key) {
-            await ctx.sock.sendMessage(jid, {
-                text: `ꕤ Pong: \`${latency.toFixed(4).split(".")[0]}ms\``,
-                edit: init.key
-            });
-        }
+        ctx.sock.sendMessage(jid, {
+            text: `ꕤ Pong: \`${latency}ms\``
+        }, { quoted: ctx.m }).catch(() => {});
     }
 };
