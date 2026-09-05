@@ -23,7 +23,7 @@ export const UserJid = (sock: any, chat?: string, jid?: string): string => {
 
     if (sock && sock.signalRepository && sock.signalRepository.lidMapping) {
         try {
-            const cachedPn = sock.signalRepository.lidMapping.mappingCache.get(`lid:${lidNumber}`);
+            const cachedPn = sock.signalRepository.lidMapping.mappingCache?.get(`lid:${lidNumber}`);
             if (cachedPn) {
                 const resolvedJid = `${cachedPn}@s.whatsapp.net`;
                 lidCache.set(lidNumber, resolvedJid);
@@ -127,23 +127,8 @@ export function serialize(sock: any, m: proto.IWebMessageInfo) {
         isGroup,
         isBot,
         quoted,
-        reply: async (text: string) => {
-            return await sock.sendMessage(chat, { text }, { quoted: m });
-        },
-        download: async () => {
-            const media = msg;
-            if (!media) return null;
-
-            const stream = await downloadContentFromMessage(
-                media as any,
-                msgType.replace('Message', '') as any
-            );
-
-            const chunks = [];
-            for await (const chunk of stream) {
-                chunks.push(chunk);
-            }
-            return Buffer.concat(chunks);
+        reply: (text: string) => {
+            return sock.sendMessage(chat, { text }, { quoted: m });
         }
     };
 
@@ -160,7 +145,7 @@ export interface Command {
     owner?: boolean;
     admin?: boolean;
     botAdmin?: boolean;
-    run: (sock: any, msg: any) => Promise<void> | void;
+    run: (ctx: any) => Promise<void> | void;
 }
 
 export const commands = new Map<string, Command>();
@@ -177,18 +162,19 @@ export const loadCommands = async (dir = './commands') => {
         const fullPath = path.join(dir, file);
         if (fs.statSync(fullPath).isDirectory()) {
             await loadCommands(fullPath);
-        } else if (file.endsWith('.ts')) {
+        } else if (file.endsWith('.ts') || file.endsWith('.js')) {
             try {
-                const commandModule = await import(`file://${path.resolve(fullPath)}?update=${Date.now()}`);
+                const resolvedPath = path.resolve(fullPath);
+                const fileUrl = process.platform === 'win32' 
+                    ? `file:///${resolvedPath.replace(/\\/g, '/')}` 
+                    : `file://${resolvedPath}`;
+
+                const commandModule = await import(`${fileUrl}?v=${Date.now()}`);
                 const command: Command = commandModule.default || commandModule;
 
                 if (command && Array.isArray(command.command) && command.command.length > 0) {
-                    const primaryName = command.command[0].toLowerCase();
-                    commands.set(primaryName, command);
-
-                    for (let i = 1; i < command.command.length; i++) {
-                        const alias = command.command[i].toLowerCase();
-                        commands.set(alias, command);
+                    for (const alias of command.command) {
+                        commands.set(alias.toLowerCase(), command);
                     }
                 }
             } catch (err) {
