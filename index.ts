@@ -16,38 +16,28 @@ import readline from 'readline';
 import { serialize } from '#simple';
 import { loadDB } from '#db';
 import config from '#config';
+import { handler } from '#handler';
+import printMessageLog from './lib/printlog.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 (global as any).botName = config?.botName || 'Raiden-WaBot';
+(global as any).plugins = (global as any).plugins || {};
 
 const sDir = path.join(__dirname, 'Session');
-
-export interface Command {
-    command: string | string[];
-    description?: string;
-    category?: string;
-    group?: boolean;
-    owner?: boolean;
-    admin?: boolean;
-    botAdmin?: boolean;
-    run: (ctx: any) => Promise<any> | any;
-}
-
-export const commands = new Map<string, Command>();
 
 const pCache = new Set<string>();
 const mStore = new Map<string, any>();
 
-async function cargarComandosDirecto(dir = './commands') {
+async function cargarPlugins(dir = './commands') {
     const cmdDir = path.resolve(__dirname, dir);
     if (!fs.existsSync(cmdDir)) {
         console.log(chalk.yellow(`[ ADVERTENCIA ] La carpeta "${dir}" no existe.`));
         return;
     }
 
-    commands.clear();
+    (global as any).plugins = {};
 
     async function getAllFiles(directory: string): Promise<string[]> {
         const entries = await fsPromises.readdir(directory, { withFileTypes: true });
@@ -71,25 +61,19 @@ async function cargarComandosDirecto(dir = './commands') {
             try {
                 const fileUrl = pathToFileURL(fullPath).href;
                 const cmdModule = await import(`${fileUrl}?update=${ts}`);
-                const cFile = cmdModule.default?.default || cmdModule.default || cmdModule;
+                const plugin = cmdModule.default?.default || cmdModule.default || cmdModule;
 
-                if (cFile?.command && cFile?.run) {
-                    const aliases = Array.isArray(cFile.command) ? cFile.command : [cFile.command];
-                    aliases.forEach((alias: string) => {
-                        commands.set(alias.toLowerCase(), cFile);
-                    });
-                    cargados++;
-                    console.log(chalk.green(`  ✔ Cargado:`), chalk.gray(path.relative(__dirname, fullPath)));
-                } else {
-                    console.log(chalk.yellow(`  ⚠ Omitido (sin 'command' o 'run'):`), chalk.gray(path.relative(__dirname, fullPath)));
-                }
+                const pluginName = path.basename(fullPath);
+                (global as any).plugins[pluginName] = plugin;
+                cargados++;
+                console.log(chalk.cyan(`  ✔ Cargado:`), chalk.gray(path.relative(__dirname, fullPath)));
             } catch (e) {
                 console.error(chalk.red(`  ✖ Error en ${fullPath}:`), e);
             }
         })
     );
 
-    console.log(chalk.bold.cyan(`\n[ SYSTEM ] Total de comandos listos: ${commands.size} (Archivos válidos: ${cargados})\n`));
+    console.log(chalk.bold.cyan(`\n[ SYSTEM ] Total de plugins cargados: ${cargados}\n`));
 }
 
 const askQuestion = (query: string): Promise<string> => {
@@ -109,8 +93,8 @@ const displayLoadingMessage = () => {
 async function startBot() {
     loadDB();
     
-    console.log(chalk.bold.blue('\n--- CARGANDO ARCHIVOS DE COMANDOS ---'));
-    await cargarComandosDirecto('./commands');
+    console.log(chalk.bold.cyan('\n--- CARGANDO PLUGINS DE COMANDOS ---'));
+    await cargarPlugins('./commands');
 
     const { state, saveCreds } = await useMultiFileAuthState(sDir);
     const { version } = await fetchLatestBaileysVersion();
@@ -160,7 +144,7 @@ async function startBot() {
             try {
                 let code = await sock.requestPairingCode(num);
                 code = code?.match(/.{1,4}/g)?.join("-") || code;
-                console.log(chalk.white.bgBlue(` CODIGO DE VINCULACION `), chalk.white(`: ${code}`));
+                console.log(chalk.white.bgCyan(` CODIGO DE VINCULACION `), chalk.white(`: ${code}`));
             } catch (err) {
                 console.log(chalk.white('[ ERROR ] solicitud de codigo:'), err);
             }
@@ -172,7 +156,7 @@ async function startBot() {
     sock.ev.on('connection.update', (u) => {
         if (u.connection === 'open') {
             (global as any).mainConn = sock;
-            console.log(chalk.bold.green(`\n✿ ${(global as any).botName} conectado y listo para recibir mensajes ✰\n`));
+            console.log(chalk.bold.cyan(`\n✿ ${(global as any).botName} conectado y listo para recibir mensajes ✰\n`));
         }
 
         if (u.connection === 'close') {
@@ -223,41 +207,13 @@ async function startBot() {
 
             queueMicrotask(async () => {
                 try {
-                    console.log(chalk.bgMagenta.black(' [RED-EVENT] '), chalk.magenta('Mensaje procesado en microtask.'));
-
                     const m = serialize(sock, rawMsg);
                     if (!m) return;
 
-                    const texto = m.body?.trim();
-                    console.log(chalk.cyan(`  ├─ Emisor: ${m.sender}`));
-                    console.log(chalk.cyan(`  ├─ Chat: ${m.chat}`));
-                    console.log(chalk.cyan(`  └─ Texto recibido: "${texto}"`));
-
-                    if (!texto) return;
-
-                    const prefixes = ['.', '#', '/', '!'];
-                    const prefix = prefixes.find(p => texto.startsWith(p)) || '';
-                    const usedPrefix = prefix;
-
-                    const args = texto.slice(usedPrefix.length).trim().split(/ +/);
-                    const commandName = args.shift()?.toLowerCase() || '';
-
-                    if (usedPrefix) {
-                        console.log(chalk.blue(`  ├─ Buscando comando: "${commandName}"`));
-                        const cmd = commands.get(commandName);
-
-                        if (cmd) {
-                            console.log(chalk.bold.green(`  └─ ¡COMANDO ENCONTRADO! Ejecutando...`));
-                            await cmd.run({ sock, m, text: args.join(' '), args, command: commandName, usedPrefix });
-                            console.log(chalk.bold.green(`  ✔ Ejecutado con éxito`));
-                        } else {
-                            console.log(chalk.bold.red(`  └─ ✖ El comando "${commandName}" NO existe.`));
-                        }
-                    } else {
-                        console.log(chalk.gray(`  └─ Ignorado (sin prefijo válido)`));
-                    }
+                    printMessageLog(m, sock).catch(() => {});
+                    await handler(sock, rawMsg);
                 } catch (err) {
-                    console.error(chalk.red('[ ERROR UPSERT ] Error en procesamiento de mensaje:'), err);
+                    console.error(chalk.red('[ ERROR UPSERT ] Error en procesamiento:'), err);
                 }
             });
         }
@@ -267,8 +223,8 @@ async function startBot() {
     if (fs.existsSync(commandsPath)) {
         fs.watch(commandsPath, { recursive: true }, (_, filename) => {
             if (filename && (filename.endsWith('.ts') || filename.endsWith('.js'))) {
-                console.log(chalk.yellow(`\n[ AUTO-RELOAD ] Cambio detectado en ${filename}. Recargando...`));
-                cargarComandosDirecto('./commands').catch(() => {});
+                console.log(chalk.yellow(`\n[ AUTO-RELOAD ] Cambio detectado en ${filename}. Recargando plugins...`));
+                cargarPlugins('./commands').catch(() => {});
             }
         });
     }
