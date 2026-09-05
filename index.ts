@@ -132,19 +132,16 @@ async function startBot() {
         if (chatUpdate.type !== 'notify') return;
         
         const msgs = chatUpdate.messages;
-        const len = msgs.length;
+        if (!msgs || !msgs.length) return;
 
-        for (let i = 0; i < len; i++) {
-            const rawMsg = msgs[i];
-            if (!rawMsg) continue;
-            handler(sock, rawMsg);
+        for (let i = 0; i < msgs.length; i++) {
+            handler(sock, msgs[i]);
         }
     });
 
     if (fs.existsSync('./commands')) {
         fs.watch('./commands', { recursive: true }, (_, filename) => {
-            if (filename && filename.endsWith('.ts')) {
-                console.log(chalk.yellow(`[HOT-RELOAD] Cambio en commands/${filename}. Recargando...`));
+            if (filename && (filename.endsWith('.ts') || filename.endsWith('.js'))) {
                 loadCommands('./commands').catch(() => {});
             }
         });
