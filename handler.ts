@@ -1,7 +1,8 @@
 import { serialize, decodeJid, UserJid } from '#simple';
 import { registerData } from '#db';
 import config from '#config';
-import { commands } from './index.js'; // Ajusta la ruta si 'commands' está en index u otro archivo
+import chalk from 'chalk';
+import { commands } from './index.js';
 
 const groupMetaCache = new Map<string, { data: any; ttl: number }>();
 
@@ -150,7 +151,9 @@ export const handler = async (sock: any, rawMsg: any) => {
         await Promise.resolve(cmd.run(ctx));
 
     } catch (e: any) {
-        console.error('[ ERROR HANDLER ] Error capturado durante la ejecución:');
-        console.error(e?.stack || e?.message || e);
+        if (e?.message?.includes('rate-overlimit') || e?.status === 429) return;
+        if (!e?.message?.includes('jidDecode')) {
+            console.error(chalk.red('Error en handler:'), e);
+        }
     }
 };
