@@ -88,12 +88,16 @@ export const handler = async (sock: any, rawMsg: any) => {
             }
         }
 
-        const [realJid, groupMetadata] = await Promise.all([
-            UserJid(sock, msg.chat, msg.sender).catch(() => msg.sender),
-            msg.isGroup ? getGroupMetadata(sock, msg.chat) : null
-        ]);
+        let realJid = msg.sender;
+        try {
+            realJid = UserJid(sock, msg.chat, msg.sender) || msg.sender;
+        } catch {
+            realJid = msg.sender;
+        }
 
-        const normalizedSender = normalizeNumber(realJid || msg.sender);
+        const groupMetadata = msg.isGroup ? await getGroupMetadata(sock, msg.chat) : null;
+
+        const normalizedSender = normalizeNumber(realJid);
         const ownerConfig = config.owner || (global as any)?.owner || [];
         const allOwnerNumbers = (Array.isArray(ownerConfig) ? ownerConfig : Object.values(ownerConfig).flat()) as string[];
 
@@ -132,7 +136,7 @@ export const handler = async (sock: any, rawMsg: any) => {
             return;
         }
 
-        const cleanSender = (realJid || msg.sender).split('@')[0].split(':')[0] + '@s.whatsapp.net';
+        const cleanSender = realJid.split('@')[0].split(':')[0] + '@s.whatsapp.net';
         const dbData = (global as any).db?.data;
 
         if (dbData) {
