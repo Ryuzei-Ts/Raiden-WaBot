@@ -2,7 +2,6 @@ import { serialize, decodeJid, UserJid } from '#simple';
 import { registerData } from '#db';
 import config from '#config';
 import chalk from 'chalk';
-import { commands } from './index.js';
 
 const groupMetaCache = new Map<string, { data: any; ttl: number }>();
 
@@ -21,16 +20,6 @@ const setGroupMeta = (from: string, data: any) => {
     });
 };
 
-const getAdmins = (participants: any[] = []) => {
-    try {
-        return participants
-            .filter(p => p?.admin === 'admin' || p?.admin === 'superadmin')
-            .map(p => decodeJid(p?.id || ''));
-    } catch {
-        return [];
-    }
-};
-
 const checkAdmin = async (sock: any, from: string, sender: string) => {
     if (!from || !from.endsWith('@g.us')) {
         return { isUserAdmin: false, isBotAdmin: false };
@@ -39,26 +28,31 @@ const checkAdmin = async (sock: any, from: string, sender: string) => {
     try {
         let metadata = getGroupMeta(from);
         if (!metadata) {
-            metadata = await sock.groupMetadata(from);
+            metadata = await sock.groupMetadata(from).catch(() => null);
             if (metadata) setGroupMeta(from, metadata);
         }
 
-        if (!metadata || !Array.isArray(metadata.participants)) {
-            return { isUserAdmin: false, isBotAdmin: false };
-        }
+        const participants = metadata?.participants || [];
 
-        const admins = getAdmins(metadata.participants);
+        const adminSet = new Set(
+            participants
+                .filter((p: any) => p.admin === 'admin' || p.admin === 'superadmin')
+                .flatMap((p: any) => [
+                    p.id?.split('@')[0],
+                    p.lid?.split('@')[0],
+                    p.phoneNumber?.split('@')[0]
+                ].filter(Boolean))
+        );
+
         const botRawId = sock?.user?.id || '';
-        
         const botJid = UserJid(sock, from, botRawId);
         const targetJid = UserJid(sock, from, sender);
 
-        const botId = decodeJid(botJid);
-        const botLid = sock?.user?.lid ? decodeJid(sock.user.lid) : null;
-        const targetSender = decodeJid(targetJid);
+        const senderBase = targetJid.split('@')[0];
+        const botBase = botJid.split('@')[0];
 
-        const isUserAdmin = admins.some(admin => admin === targetSender);
-        const isBotAdmin = admins.some(admin => admin === botId || (botLid && admin === botLid));
+        const isBotAdmin = adminSet.has(botBase);
+        const isUserAdmin = adminSet.has(senderBase);
 
         return { isUserAdmin, isBotAdmin };
     } catch {
@@ -71,7 +65,18 @@ export const handler = async (sock: any, rawMsg: any) => {
         const msg = serialize(sock, rawMsg);
         if (!msg || !msg.body) return;
 
-        registerData(sock, msg).catch(() => {});
+        if (global.plugins && typeof global.plugins === 'object') {
+            for (const name in global.plugins) {
+                try {
+                    const plugin = (global.plugins as any)[name];
+                    if (plugin?.before && typeof plugin.before === "function") {
+                        plugin.before.call(sock, msg, { sock }).then((handled: any) => {
+                            if (handled) return;
+                        }).catch(() => {});
+                    }
+                } catch {}
+            }
+        }
 
         const prefix = config.prefix || '.';
         if (!msg.body.startsWith(prefix)) return;
@@ -80,17 +85,38 @@ export const handler = async (sock: any, rawMsg: any) => {
         const commandName = args.shift()?.toLowerCase();
         if (!commandName) return;
 
-        const cmd = commands.get(commandName);
+        let cmd: any = null;
+        if (global.plugins && typeof global.plugins === 'object') {
+            for (const name in global.plugins) {
+                const plugin = (global.plugins as any)[name];
+                if (!plugin?.command) continue;
+                const aliases = Array.isArray(plugin.command) ? plugin.command : [plugin.command];
+                if (aliases.map((a: string) => a.toLowerCase()).includes(commandName)) {
+                    cmd = plugin;
+                    break;
+                }
+            }
+        }
+
         if (!cmd) return;
 
-        const owners = Array.isArray(config.owner) ? config.owner : [config.owner];
-        const cleanSender = msg.sender.replace(/[^0-9]/g, '');
+        setImmediate(() => {
+            registerData(sock, msg).catch(() => {});
+        });
 
-        const isOwner = owners.some((num: string) => {
-            const cleanNum = num.replace(/[^0-9]/g, '');
+        const normalizeNumber = (x: string) => String(x || "").split("@")[0].split(":")[0].replace(/[^\d]/g, "").trim();
+
+        const realJid = UserJid(sock, msg.chat, msg.sender) || msg.sender;
+        const normalizedSender = normalizeNumber(realJid);
+        
+        const ownerConfig = config.owner || (global as any)?.owner || [];
+        const allOwnerNumbers = (Array.isArray(ownerConfig) ? ownerConfig : Object.values(ownerConfig).flat()) as string[];
+        
+        const isOwner = allOwnerNumbers.some((num: string) => {
+            const cleanNum = normalizeNumber(num);
             return (
-                cleanSender.includes(cleanNum) ||
-                cleanSender.replace(/^521/, '52') === cleanNum.replace(/^521/, '52')
+                normalizedSender === cleanNum ||
+                normalizedSender.replace(/^521/, '52') === cleanNum.replace(/^521/, '52')
             );
         });
 
@@ -148,7 +174,10 @@ export const handler = async (sock: any, rawMsg: any) => {
             }
         };
 
-        await Promise.resolve(cmd.run(ctx));
+        const executeCommand = cmd.run || cmd.default || (typeof cmd === 'function' ? cmd : null);
+        if (executeCommand) {
+            await Promise.resolve(executeCommand(ctx));
+        }
 
     } catch (e: any) {
         if (e?.message?.includes('rate-overlimit') || e?.status === 429) return;
