@@ -9,7 +9,6 @@
     "dev": "nodemon index.ts"
   },
   "imports": {
-    "#message": "./lib/message.ts",
     "#config": "./config.ts",
     "#simple": "./lib/simple.ts",
     "#db": "./lib/database.ts",
