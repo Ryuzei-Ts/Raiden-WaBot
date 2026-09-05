@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { proto, getContentType, jidDecode, downloadContentFromMessage } from '@whiskeysockets/baileys';
 
 export const lidCache = new Map<string, string>();
 
@@ -47,4 +48,152 @@ export const UserJid = (sock: any, chat?: string, jid?: string): string => {
 
     return targetJid;
 };
-      
+
+export const decodeJid = (jid: string): string => {
+    if (!jid) return jid;
+    if (jid.includes(':')) {
+        const decoded = jidDecode(jid);
+        return decoded ? `${decoded.user}@${decoded.server}` : jid;
+    }
+    return jid;
+};
+
+const messageCache = new WeakMap();
+
+export function serialize(sock: any, m: proto.IWebMessageInfo) {
+    if (!m?.message) return null;
+
+    if (messageCache.has(m)) {
+        return messageCache.get(m);
+    }
+
+    const msgType = getContentType(m.message);
+    if (!msgType) return null;
+
+    let msg = m.message[msgType];
+
+    if (msgType === 'viewOnceMessage' || msgType === 'ephemeralMessage') {
+        msg = (msg as any)?.message || msg;
+    }
+
+    const body = 
+        msg?.conversation ||
+        msg?.extendedTextMessage?.text ||
+        msg?.imageMessage?.caption ||
+        msg?.videoMessage?.caption ||
+        msg?.documentWithCaptionMessage?.message?.documentMessage?.caption ||
+        msg?.buttonsResponseMessage?.selectedButtonId ||
+        msg?.listResponseMessage?.singleSelectReply?.selectedRowId ||
+        msg?.templateButtonReplyMessage?.selectedId ||
+        '';
+
+    const key = m.key;
+    const remoteJid = key.remoteJid || '';
+    const chat = decodeJid(remoteJid);
+    const sender = decodeJid(key.participant || remoteJid);
+    const isGroup = chat.endsWith('@g.us');
+    const isBot = !!key.fromMe;
+
+    let quoted = null;
+    const contextInfo = msg?.contextInfo;
+    if (contextInfo?.quotedMessage) {
+        const quotedMsg = contextInfo.quotedMessage;
+        const quotedType = getContentType(quotedMsg);
+        const quotedBody = 
+            quotedMsg?.conversation ||
+            quotedMsg?.extendedTextMessage?.text ||
+            '';
+
+        quoted = {
+            type: quotedType,
+            msg: quotedMsg,
+            key: {
+                remoteJid: chat,
+                fromMe: contextInfo.participant === sock.user?.id,
+                id: contextInfo.stanzaId,
+                participant: contextInfo.participant
+            },
+            body: quotedBody
+        };
+    }
+
+    const result = {
+        ...m,
+        type: msgType,
+        body,
+        chat,
+        sender,
+        from: chat,
+        isGroup,
+        isBot,
+        quoted,
+        reply: async (text: string) => {
+            return await sock.sendMessage(chat, { text }, { quoted: m });
+        },
+        download: async () => {
+            const media = msg;
+            if (!media) return null;
+
+            const stream = await downloadContentFromMessage(
+                media as any,
+                msgType.replace('Message', '') as any
+            );
+
+            const chunks = [];
+            for await (const chunk of stream) {
+                chunks.push(chunk);
+            }
+            return Buffer.concat(chunks);
+        }
+    };
+
+    messageCache.set(m, result);
+
+    return result;
+}
+
+export interface Command {
+    command: string[];
+    description?: string;
+    category?: string;
+    group?: boolean;
+    owner?: boolean;
+    admin?: boolean;
+    botAdmin?: boolean;
+    run: (sock: any, msg: any) => Promise<void> | void;
+}
+
+export const commands = new Map<string, Command>();
+
+export const loadCommands = async (dir = './commands') => {
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+        return;
+    }
+
+    const files = fs.readdirSync(dir);
+
+    for (const file of files) {
+        const fullPath = path.join(dir, file);
+        if (fs.statSync(fullPath).isDirectory()) {
+            await loadCommands(fullPath);
+        } else if (file.endsWith('.ts')) {
+            try {
+                const commandModule = await import(`file://${path.resolve(fullPath)}?update=${Date.now()}`);
+                const command: Command = commandModule.default || commandModule;
+
+                if (command && Array.isArray(command.command) && command.command.length > 0) {
+                    const primaryName = command.command[0].toLowerCase();
+                    commands.set(primaryName, command);
+
+                    for (let i = 1; i < command.command.length; i++) {
+                        const alias = command.command[i].toLowerCase();
+                        commands.set(alias, command);
+                    }
+                }
+            } catch (err) {
+                console.error(`Error cargando comando en ${fullPath}:`, err);
+            }
+        }
+    }
+};
