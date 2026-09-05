@@ -5,6 +5,7 @@ export interface Config {
     owner: string[];
     banner: string;
     icon: string;
+    coin: string;
 }
 
 const config: Config = {
@@ -17,7 +18,8 @@ const config: Config = {
         '905364919591'
     ],
     banner: 'https://cdn.ryuzei.xyz/files/mz6r0pg6.jpeg',
-    icon: 'https://cdn.ryuzei.xyz/files/x21npy.jpeg'
+    icon: 'https://cdn.ryuzei.xyz/files/x21npy.jpeg',
+    coin: '¥enes'
 };
 
 export default config;
