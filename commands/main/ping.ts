@@ -8,9 +8,12 @@ export default {
     botAdmin: false,
 
     run: async (ctx: any) => {
+        const jid = ctx.chat || ctx.m?.chat || ctx.from;
+        if (!jid) return;
+
         const start = Date.now();
 
-        const initMsg = await ctx.sock.sendMessage(ctx.chat, { 
+        const initMsg = await ctx.sock.sendMessage(jid, { 
             text: '⚡ Calculando...' 
         }, { 
             quoted: ctx.m 
@@ -18,12 +21,10 @@ export default {
 
         const latency = Date.now() - start;
 
-        if (typeof ctx.edit === 'function' && initMsg?.key) {
-            await ctx.edit(`🏓 *Pong!*\n\n⏱️ *Latencia:* \`${latency} ms\``, initMsg.key);
-        } else {
-            await ctx.sock.sendMessage(ctx.chat, {
+        if (initMsg?.key) {
+            await ctx.sock.sendMessage(jid, {
                 text: `🏓 *Pong!*\n\n⏱️ *Latencia:* \`${latency} ms\``,
-                edit: initMsg?.key
+                edit: initMsg.key
             });
         }
     }
