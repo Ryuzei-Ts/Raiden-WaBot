@@ -129,6 +129,21 @@ export function serialize(sock: any, m: proto.IWebMessageInfo) {
         quoted,
         reply: (text: string) => {
             return sock.sendMessage(chat, { text }, { quoted: m });
+        },
+        download: async () => {
+            const media = msg;
+            if (!media) return null;
+
+            const stream = await downloadContentFromMessage(
+                media as any,
+                msgType.replace('Message', '') as any
+            );
+
+            const chunks = [];
+            for await (const chunk of stream) {
+                chunks.push(chunk);
+            }
+            return Buffer.concat(chunks);
         }
     };
 
@@ -145,7 +160,7 @@ export interface Command {
     owner?: boolean;
     admin?: boolean;
     botAdmin?: boolean;
-    run: (ctx: any) => Promise<void> | void;
+    run: (ctx: any) => Promise<any> | any;
 }
 
 export const commands = new Map<string, Command>();
@@ -169,7 +184,7 @@ export const loadCommands = async (dir = './commands') => {
                     ? `file:///${resolvedPath.replace(/\\/g, '/')}` 
                     : `file://${resolvedPath}`;
 
-                const commandModule = await import(`${fileUrl}?v=${Date.now()}`);
+                const commandModule = await import(fileUrl);
                 const command: Command = commandModule.default || commandModule;
 
                 if (command && Array.isArray(command.command) && command.command.length > 0) {
