@@ -38,7 +38,7 @@ const displayLoadingMessage = () => {
 
 async function startBot() {
     loadDB();
-    await loadCommands();
+    await loadCommands('./commands');
 
     const { state, saveCreds } = await useMultiFileAuthState(sDir);
     const { version } = await fetchLatestBaileysVersion();
@@ -128,22 +128,24 @@ async function startBot() {
         }
     });
 
-    sock.ev.on('messages.upsert', async (chatUpdate) => {
+    sock.ev.on('messages.upsert', (chatUpdate) => {
         if (chatUpdate.type !== 'notify') return;
         
         const msgs = chatUpdate.messages;
         const len = msgs.length;
 
         for (let i = 0; i < len; i++) {
-            await handler(sock, msgs[i]);
+            const rawMsg = msgs[i];
+            if (!rawMsg) continue;
+            handler(sock, rawMsg);
         }
     });
 
     if (fs.existsSync('./commands')) {
-        fs.watch('./commands', { recursive: true }, async (_, filename) => {
+        fs.watch('./commands', { recursive: true }, (_, filename) => {
             if (filename && filename.endsWith('.ts')) {
                 console.log(chalk.yellow(`[HOT-RELOAD] Cambio en commands/${filename}. Recargando...`));
-                await loadCommands();
+                loadCommands('./commands').catch(() => {});
             }
         });
     }
