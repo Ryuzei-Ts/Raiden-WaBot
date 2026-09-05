@@ -28,7 +28,8 @@ export default {
         const link = 'https://api.ryuzei.xyz';
         const bannerUrl = config.banner;
 
-        const uptime = formatUptime(os.uptime());
+        const botUptime = formatUptime(process.uptime());
+        
         const totalMem = (os.totalmem() / 1024 / 1024 / 1024).toFixed(2);
         const freeMem = (os.freemem() / 1024 / 1024 / 1024).toFixed(2);
         const cpus = os.cpus();
@@ -41,13 +42,13 @@ export default {
             `✿ Información del Bot *${config.botName}*\n\n` +
             `✿ *Nombre:* ${config.botName}\n` +
             `✿ *Desarrollador:* ${config.devName}\n` +
-            `✦ *Moneda:* ${config.coin || 'Coins'}\n` +
+            `✦ *Moneda:* ${config.coin || '¥enes'}\n` +
             `✦ *Prefijo:* ${p}\n\n` +
-            `❒ *Entorno / OS:* ${platformName} (${arch})\n` +
+            `❒ *Entorno:* ${platformName} (${arch})\n` +
             `❒ *Procesador:* ${cpuModel}\n` +
             `❒ *Núcleos:* ${cpuCores} vCPU\n` +
             `❒ *Memoria RAM:* ${freeMem} GB / ${totalMem} GB\n` +
-            `❒ *Uptime:* ${uptime}\n\n` +
+            `❒ *Uptime:* ${botUptime}\n\n` +
             `> *Enlace:* ${link}`;
 
         await sock.sendMessage(chat, {
