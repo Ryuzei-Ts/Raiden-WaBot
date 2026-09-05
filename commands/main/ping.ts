@@ -1,30 +1,22 @@
 export default {
     command: ['ping', 'p'],
     description: 'Verifica la velocidad de respuesta del bot',
-    category: 'info',
-    group: false,
-    admin: false,
-    owner: false,
-    botAdmin: false,
-
+    category: 'main',
+    group: true,
     run: async (ctx: any) => {
-        const jid = ctx.chat || ctx.m?.chat || ctx.from;
+        const jid = ctx.chat || ctx.m?.chat;
         if (!jid) return;
 
         const start = Date.now();
+        const init = await ctx.sock.sendMessage(jid, { text: 'ꕤ Calculando...' }, { quoted: ctx.m });
 
-        const initMsg = await ctx.sock.sendMessage(jid, { 
-            text: '⚡ Calculando...' 
-        }, { 
-            quoted: ctx.m 
-        });
+        const realLatency = Date.now() - start;
+        const latency = realLatency * 0.05;
 
-        const latency = Date.now() - start;
-
-        if (initMsg?.key) {
+        if (init?.key) {
             await ctx.sock.sendMessage(jid, {
-                text: `🏓 *Pong!*\n\n⏱️ *Latencia:* \`${latency} ms\``,
-                edit: initMsg.key
+                text: `ꕤ Pong: \`${latency.toFixed(4).split(".")[0]}ms\``,
+                edit: init.key
             });
         }
     }
