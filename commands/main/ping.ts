@@ -1,15 +1,19 @@
 export default {
-    command: ['ping', 'p', 'ms'],
-    description: 'Muestra la velocidad de respuesta del bot',
-    category: 'main',
-    run: async (ctx: any) => {
+    command: ['ping', 'p'],
+    description: 'Verifica la velocidad de respuesta del bot',
+    category: 'info',
+    group: true,
+    run: async ({ sock, chat, m, edit }) => {
         const start = Date.now();
 
-        const sent = await ctx.reply('*𝖢𝗈𝗆𝗉𝗋𝗈𝖻𝖺𝗇𝖽𝗈...*');
-        const ms = Date.now() - start;
+        const initMsg = await sock.sendMessage(chat, { 
+            text: '⚡ Calculando...' 
+        }, { 
+            quoted: m 
+        });
 
-        if (sent?.key) {
-            await ctx.edit(`⚡ *PONG:* \`${ms}ms\``, sent.key);
-        }
+        const latency = Date.now() - start;
+
+        await edit(`🏓 *Pong!*\n\n⏱️ *Latencia:* \`${latency} ms\``, initMsg.key);
     }
 };
