@@ -2,18 +2,29 @@ export default {
     command: ['ping', 'p'],
     description: 'Verifica la velocidad de respuesta del bot',
     category: 'info',
-    group: true,
-    run: async ({ sock, chat, m, edit }) => {
+    group: false,
+    admin: false,
+    owner: false,
+    botAdmin: false,
+
+    run: async (ctx: any) => {
         const start = Date.now();
 
-        const initMsg = await sock.sendMessage(chat, { 
+        const initMsg = await ctx.sock.sendMessage(ctx.chat, { 
             text: '⚡ Calculando...' 
         }, { 
-            quoted: m 
+            quoted: ctx.m 
         });
 
         const latency = Date.now() - start;
 
-        await edit(`🏓 *Pong!*\n\n⏱️ *Latencia:* \`${latency} ms\``, initMsg.key);
+        if (typeof ctx.edit === 'function' && initMsg?.key) {
+            await ctx.edit(`🏓 *Pong!*\n\n⏱️ *Latencia:* \`${latency} ms\``, initMsg.key);
+        } else {
+            await ctx.sock.sendMessage(ctx.chat, {
+                text: `🏓 *Pong!*\n\n⏱️ *Latencia:* \`${latency} ms\``,
+                edit: initMsg?.key
+            });
+        }
     }
 };
