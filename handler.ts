@@ -1,6 +1,7 @@
-import { serialize, commands, decodeJid, UserJid } from '#simple';
+import { serialize, decodeJid, UserJid } from '#simple';
 import { registerData } from '#db';
 import config from '#config';
+import { commands } from './index.js'; // Ajusta la ruta si 'commands' está en index u otro archivo
 
 const groupMetaCache = new Map<string, { data: any; ttl: number }>();
 
@@ -141,13 +142,15 @@ export const handler = async (sock: any, rawMsg: any) => {
             quoted: msg.quoted,
             reply: msg.reply,
             edit: (text: string, key: any) => {
+                if (!key) return Promise.resolve(null);
                 return sock.sendMessage(msg.chat, { text, edit: key });
             }
         };
 
         await Promise.resolve(cmd.run(ctx));
 
-    } catch (e) {
-        console.error('Error en handler:', e);
+    } catch (e: any) {
+        console.error('[ ERROR HANDLER ] Error capturado durante la ejecución:');
+        console.error(e?.stack || e?.message || e);
     }
 };
