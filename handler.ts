@@ -1,64 +1,65 @@
-import { serialize, decodeJid, UserJid } from '#simple';
+import { serialize, UserJid } from '#simple';
 import { registerData } from '#db';
 import config from '#config';
 import chalk from 'chalk';
 
-const groupMetaCache = new Map<string, { data: any; ttl: number }>();
+const groupMetaCache = new Map<string, { metadata: any; ts: number }>();
+const META_TTL = 5000;
 
-const getGroupMeta = (from: string) => {
-    const cached = groupMetaCache.get(from);
-    if (cached && Date.now() < cached.ttl) {
-        return cached.data;
+function getCachedMeta(groupJid: string) {
+    const c = groupMetaCache.get(groupJid);
+    if (!c || Date.now() - c.ts > META_TTL) return null;
+    return c.metadata;
+}
+
+function setCachedMeta(groupJid: string, metadata: any) {
+    groupMetaCache.set(groupJid, { metadata, ts: Date.now() });
+}
+
+async function getGroupMetadata(sock: any, chatId: string) {
+    let metadata = getCachedMeta(chatId);
+    if (!metadata) {
+        metadata = await sock.groupMetadata(chatId).catch(() => null);
+        if (metadata) setCachedMeta(chatId, metadata);
     }
-    return null;
-};
+    return metadata;
+}
 
-const setGroupMeta = (from: string, data: any) => {
-    groupMetaCache.set(from, {
-        data,
-        ttl: Date.now() + 5000
+function isUserAdmin(participants: any[], userId: string) {
+    if (!participants || !Array.isArray(participants)) return false;
+    const userBase = userId?.split('@')[0];
+    if (!userBase) return false;
+
+    return participants.some(p => {
+        if (p.admin !== 'admin' && p.admin !== 'superadmin') return false;
+
+        const ids = [
+            p.id?.split('@')[0],
+            p.lid?.split('@')[0],
+            p.phoneNumber?.split('@')[0]
+        ].filter(Boolean);
+
+        return ids.includes(userBase);
     });
-};
+}
 
-const checkAdmin = async (sock: any, from: string, sender: string) => {
-    if (!from || !from.endsWith('@g.us')) {
-        return { isUserAdmin: false, isBotAdmin: false };
-    }
+function isBotAdmin(participants: any[], botJid: string) {
+    if (!participants || !Array.isArray(participants)) return false;
+    const botBase = botJid?.split('@')[0];
+    if (!botBase) return false;
 
-    try {
-        let metadata = getGroupMeta(from);
-        if (!metadata) {
-            metadata = await sock.groupMetadata(from).catch(() => null);
-            if (metadata) setGroupMeta(from, metadata);
-        }
+    return participants.some(p => {
+        if (p.admin !== 'admin' && p.admin !== 'superadmin') return false;
 
-        const participants = metadata?.participants || [];
+        const ids = [
+            p.id?.split('@')[0],
+            p.lid?.split('@')[0],
+            p.phoneNumber?.split('@')[0]
+        ].filter(Boolean);
 
-        const adminSet = new Set(
-            participants
-                .filter((p: any) => p.admin === 'admin' || p.admin === 'superadmin')
-                .flatMap((p: any) => [
-                    p.id?.split('@')[0],
-                    p.lid?.split('@')[0],
-                    p.phoneNumber?.split('@')[0]
-                ].filter(Boolean))
-        );
-
-        const botRawId = sock?.user?.id || '';
-        const botJid = UserJid(sock, from, botRawId);
-        const targetJid = UserJid(sock, from, sender);
-
-        const senderBase = targetJid.split('@')[0];
-        const botBase = botJid.split('@')[0];
-
-        const isBotAdmin = adminSet.has(botBase);
-        const isUserAdmin = adminSet.has(senderBase);
-
-        return { isUserAdmin, isBotAdmin };
-    } catch {
-        return { isUserAdmin: false, isBotAdmin: false };
-    }
-};
+        return ids.includes(botBase);
+    });
+}
 
 export const handler = async (sock: any, rawMsg: any) => {
     try {
@@ -108,10 +109,10 @@ export const handler = async (sock: any, rawMsg: any) => {
 
         const realJid = UserJid(sock, msg.chat, msg.sender) || msg.sender;
         const normalizedSender = normalizeNumber(realJid);
-        
+
         const ownerConfig = config.owner || (global as any)?.owner || [];
         const allOwnerNumbers = (Array.isArray(ownerConfig) ? ownerConfig : Object.values(ownerConfig).flat()) as string[];
-        
+
         const isOwner = allOwnerNumbers.some((num: string) => {
             const cleanNum = normalizeNumber(num);
             return (
@@ -130,23 +131,27 @@ export const handler = async (sock: any, rawMsg: any) => {
             return;
         }
 
-        let isUserAdmin = false;
-        let isBotAdmin = false;
+        let groupMetadata = null;
+        if (msg.isGroup) {
+            groupMetadata = await getGroupMetadata(sock, msg.chat);
+        }
 
-        if (msg.isGroup && (cmd.admin || cmd.botAdmin)) {
-            const adminStatus = await checkAdmin(sock, msg.chat, msg.sender);
-            isUserAdmin = adminStatus.isUserAdmin;
-            isBotAdmin = adminStatus.isBotAdmin;
+        const participants = groupMetadata?.participants || [];
 
-            if (cmd.admin && !isUserAdmin && !isOwner) {
-                msg.reply('❌ Necesitas ser administrador del grupo para usar este comando.');
-                return;
-            }
+        const isAdmins = msg.isGroup ? isUserAdmin(participants, msg.sender) : false;
+        
+        const rawBotJid = sock.user?.id || sock.user?.jid || '';
+        const botJid = rawBotJid.split(':')[0] + '@s.whatsapp.net';
+        const isBotAdmins = msg.isGroup ? isBotAdmin(participants, botJid) : false;
 
-            if (cmd.botAdmin && !isBotAdmin) {
-                msg.reply('❌ El bot necesita ser administrador del grupo para ejecutar este comando.');
-                return;
-            }
+        if (cmd.admin && !isAdmins && !isOwner) {
+            msg.reply('❌ Necesitas ser administrador del grupo para usar este comando.');
+            return;
+        }
+
+        if (cmd.botAdmin && !isBotAdmins) {
+            msg.reply('❌ El bot necesita ser administrador del grupo para ejecutar este comando.');
+            return;
         }
 
         const ctx = {
@@ -158,8 +163,8 @@ export const handler = async (sock: any, rawMsg: any) => {
             command: commandName,
             prefix,
             owner: isOwner,
-            admin: isUserAdmin,
-            botAdmin: isBotAdmin,
+            admin: isAdmins,
+            botAdmin: isBotAdmins,
             type: msg.type,
             body: msg.body,
             chat: msg.chat,
