@@ -69,24 +69,36 @@ export function serialize(sock: any, m: proto.IWebMessageInfo) {
         return messageCache.get(m);
     }
 
-    const msgType = getContentType(m.message);
-    if (!msgType) return null;
+    let rawMsg: any = m.message;
 
-    let msg = m.message[msgType];
-
-    if (msgType === 'viewOnceMessage' || msgType === 'ephemeralMessage') {
-        msg = (msg as any)?.message || msg;
+    if (rawMsg.ephemeralMessage) {
+        rawMsg = rawMsg.ephemeralMessage.message;
+    }
+    if (rawMsg.viewOnceMessage) {
+        rawMsg = rawMsg.viewOnceMessage.message;
+    }
+    if (rawMsg.viewOnceMessageV2) {
+        rawMsg = rawMsg.viewOnceMessageV2.message;
+    }
+    if (rawMsg.viewOnceMessageV2Extension) {
+        rawMsg = rawMsg.viewOnceMessageV2Extension.message;
+    }
+    if (rawMsg.documentWithCaptionMessage) {
+        rawMsg = rawMsg.documentWithCaptionMessage.message;
     }
 
+    const msgType = getContentType(rawMsg);
+    if (!msgType) return null;
+
+    const msg = rawMsg[msgType];
+
     const body = 
-        msg?.conversation ||
-        msg?.extendedTextMessage?.text ||
-        msg?.imageMessage?.caption ||
-        msg?.videoMessage?.caption ||
-        msg?.documentWithCaptionMessage?.message?.documentMessage?.caption ||
-        msg?.buttonsResponseMessage?.selectedButtonId ||
-        msg?.listResponseMessage?.singleSelectReply?.selectedRowId ||
-        msg?.templateButtonReplyMessage?.selectedId ||
+        rawMsg?.conversation ||
+        msg?.text ||
+        msg?.caption ||
+        msg?.selectedButtonId ||
+        msg?.singleSelectReply?.selectedRowId ||
+        msg?.selectedId ||
         '';
 
     const key = m.key;
@@ -97,13 +109,20 @@ export function serialize(sock: any, m: proto.IWebMessageInfo) {
     const isBot = !!key.fromMe;
 
     let quoted = null;
-    const contextInfo = msg?.contextInfo;
+    const contextInfo = msg?.contextInfo || rawMsg?.contextInfo;
     if (contextInfo?.quotedMessage) {
-        const quotedMsg = contextInfo.quotedMessage;
-        const quotedType = getContentType(quotedMsg);
+        let quotedRaw = contextInfo.quotedMessage;
+        if (quotedRaw.ephemeralMessage) quotedRaw = quotedRaw.ephemeralMessage.message;
+        if (quotedRaw.viewOnceMessage) quotedRaw = quotedRaw.viewOnceMessage.message;
+        if (quotedRaw.viewOnceMessageV2) quotedRaw = quotedRaw.viewOnceMessageV2.message;
+
+        const quotedType = getContentType(quotedRaw);
+        const quotedMsg = quotedType ? quotedRaw[quotedType] : null;
+
         const quotedBody = 
-            quotedMsg?.conversation ||
-            quotedMsg?.extendedTextMessage?.text ||
+            quotedRaw?.conversation ||
+            quotedMsg?.text ||
+            quotedMsg?.caption ||
             '';
 
         quoted = {
@@ -153,55 +172,3 @@ export function serialize(sock: any, m: proto.IWebMessageInfo) {
 
     return result;
 }
-
-export interface Command {
-    command: string | string[];
-    description?: string;
-    category?: string;
-    group?: boolean;
-    owner?: boolean;
-    admin?: boolean;
-    botAdmin?: boolean;
-    run: (ctx: any) => Promise<any> | any;
-}
-
-export const commands = new Map<string, Command>();
-
-export const loadCommands = async (dir = './commands') => {
-    const cmdDir = path.resolve(dir);
-    if (!fs.existsSync(cmdDir)) return;
-
-    async function getAllFiles(directory: string): Promise<string[]> {
-        const entries = await fsPromises.readdir(directory, { withFileTypes: true });
-        const files = await Promise.all(entries.map(e => {
-            const res = join(directory, e.name);
-            return e.isDirectory() ? getAllFiles(res) : Promise.resolve([res]);
-        }));
-        return files.flat();
-    }
-
-    const allFiles = await getAllFiles(cmdDir);
-    const files = allFiles.filter(f => 
-        (f.endsWith('.ts') || f.endsWith('.js')) && !f.endsWith('.d.ts')
-    );
-
-    const ts = Date.now();
-    await Promise.all(
-        files.map(async (fullPath) => {
-            try {
-                const fileUrl = pathToFileURL(fullPath).href;
-                const cmd = await import(`${fileUrl}?update=${ts}`);
-                const cFile = cmd.default?.default || cmd.default || cmd;
-
-                if (cFile?.command && cFile?.run) {
-                    const aliases = Array.isArray(cFile.command) ? cFile.command : [cFile.command];
-                    aliases.forEach((alias: string) => {
-                        commands.set(alias.toLowerCase(), cFile);
-                    });
-                }
-            } catch (e) {
-                console.error(`[ ERROR COMANDO ] No se pudo cargar: ${fullPath}`, e);
-            }
-        })
-    );
-};
