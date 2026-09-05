@@ -153,7 +153,7 @@ export function serialize(sock: any, m: proto.IWebMessageInfo) {
 }
 
 export interface Command {
-    command: string[];
+    command: string | string[];
     description?: string;
     category?: string;
     group?: boolean;
@@ -166,30 +166,36 @@ export interface Command {
 export const commands = new Map<string, Command>();
 
 export const loadCommands = async (dir = './commands') => {
-    if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+    const absoluteDir = path.resolve(dir);
+    if (!fs.existsSync(absoluteDir)) {
+        fs.mkdirSync(absoluteDir, { recursive: true });
         return;
     }
 
-    const files = fs.readdirSync(dir);
+    const files = fs.readdirSync(absoluteDir);
 
     for (const file of files) {
-        const fullPath = path.join(dir, file);
+        const fullPath = path.join(absoluteDir, file);
         if (fs.statSync(fullPath).isDirectory()) {
             await loadCommands(fullPath);
         } else if (file.endsWith('.ts') || file.endsWith('.js')) {
             try {
-                const resolvedPath = path.resolve(fullPath);
                 const fileUrl = process.platform === 'win32' 
-                    ? `file:///${resolvedPath.replace(/\\/g, '/')}` 
-                    : `file://${resolvedPath}`;
+                    ? `file:///${fullPath.replace(/\\/g, '/')}` 
+                    : `file://${fullPath}`;
 
                 const commandModule = await import(fileUrl);
-                const command: Command = commandModule.default || commandModule;
+                const command: Command = commandModule.default?.default || commandModule.default || commandModule;
 
-                if (command && Array.isArray(command.command) && command.command.length > 0) {
-                    for (const alias of command.command) {
-                        commands.set(alias.toLowerCase(), command);
+                if (command && command.run && typeof command.run === 'function') {
+                    const cmdList = Array.isArray(command.command) 
+                        ? command.command 
+                        : [command.command];
+
+                    for (const alias of cmdList) {
+                        if (alias && typeof alias === 'string') {
+                            commands.set(alias.toLowerCase(), command);
+                        }
                     }
                 }
             } catch (err) {
