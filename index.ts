@@ -32,12 +32,9 @@ const mStore = new Map<string, any>();
 
 async function cargarPlugins(dir = './commands') {
     const cmdDir = path.resolve(__dirname, dir);
-    if (!fs.existsSync(cmdDir)) {
-        console.log(chalk.yellow(`[ ADVERTENCIA ] La carpeta "${dir}" no existe.`));
-        return;
-    }
+    if (!fs.existsSync(cmdDir)) return;
 
-    (global as any).plugins = {};
+    const newPlugins: Record<string, any> = {};
 
     async function getAllFiles(directory: string): Promise<string[]> {
         const entries = await fsPromises.readdir(directory, { withFileTypes: true });
@@ -48,32 +45,31 @@ async function cargarPlugins(dir = './commands') {
         return files.flat();
     }
 
-    const allFiles = await getAllFiles(cmdDir);
-    const files = allFiles.filter(f => 
-        (f.endsWith('.ts') || f.endsWith('.js')) && !f.endsWith('.d.ts')
-    );
+    try {
+        const allFiles = await getAllFiles(cmdDir);
+        const files = allFiles.filter(f => 
+            (f.endsWith('.ts') || f.endsWith('.js')) && !f.endsWith('.d.ts')
+        );
 
-    const ts = Date.now();
-    let cargados = 0;
+        const ts = Date.now();
 
-    await Promise.all(
-        files.map(async (fullPath) => {
-            try {
-                const fileUrl = pathToFileURL(fullPath).href;
-                const cmdModule = await import(`${fileUrl}?update=${ts}`);
-                const plugin = cmdModule.default?.default || cmdModule.default || cmdModule;
+        await Promise.all(
+            files.map(async (fullPath) => {
+                try {
+                    const fileUrl = pathToFileURL(fullPath).href;
+                    const cmdModule = await import(`${fileUrl}?update=${ts}`);
+                    const plugin = cmdModule.default?.default || cmdModule.default || cmdModule;
+                    const pluginName = path.basename(fullPath);
+                    newPlugins[pluginName] = plugin;
+                } catch {}
+            })
+        );
 
-                const pluginName = path.basename(fullPath);
-                (global as any).plugins[pluginName] = plugin;
-                cargados++;
-                console.log(chalk.cyan(`  ✔ Cargado:`), chalk.gray(path.relative(__dirname, fullPath)));
-            } catch (e) {
-                console.error(chalk.red(`  ✖ Error en ${fullPath}:`), e);
-            }
-        })
-    );
-
-    console.log(chalk.bold.cyan(`\n[ SYSTEM ] Total de plugins cargados: ${cargados}\n`));
+        (global as any).plugins = newPlugins;
+        console.log(chalk.bold.cyan(`[ SYSTEM ] ${Object.keys(newPlugins).length} plugins cargados en memoria.`));
+    } catch (e) {
+        console.error(chalk.red('[ ERROR ] Error al cargar plugins:'), e);
+    }
 }
 
 const askQuestion = (query: string): Promise<string> => {
@@ -92,8 +88,6 @@ const displayLoadingMessage = () => {
 
 async function startBot() {
     loadDB();
-    
-    console.log(chalk.bold.cyan('\n--- CARGANDO PLUGINS DE COMANDOS ---'));
     await cargarPlugins('./commands');
 
     const { state, saveCreds } = await useMultiFileAuthState(sDir);
@@ -123,15 +117,16 @@ async function startBot() {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'silent' }) as any)
         },
-        markOnlineOnConnect: true,
+        markOnlineOnConnect: false,
+        emitOwnEvents: false,
         generateHighQualityLinkPreview: false,
         syncFullHistory: false,
         downloadHistory: false,
         fireInitQueries: false,
         keepAliveIntervalMs: 30000,
-        connectTimeoutMs: 60000,
+        connectTimeoutMs: 30000,
         defaultQueryTimeoutMs: undefined,
-        retryRequestDelayMs: 250,
+        retryRequestDelayMs: 100,
         getMessage: async () => undefined
     });
 
@@ -148,7 +143,7 @@ async function startBot() {
             } catch (err) {
                 console.log(chalk.white('[ ERROR ] solicitud de codigo:'), err);
             }
-        }, 3000);
+        }, 1500);
     }
 
     sock.ev.on('creds.update', saveCreds);
@@ -156,26 +151,19 @@ async function startBot() {
     sock.ev.on('connection.update', (u) => {
         if (u.connection === 'open') {
             (global as any).mainConn = sock;
-            console.log(chalk.bold.cyan(`\n✿ ${(global as any).botName} conectado y listo para recibir mensajes ✰\n`));
+            console.log(chalk.bold.cyan(`\n✿ ${(global as any).botName} conectado y listo ✰\n`));
         }
 
         if (u.connection === 'close') {
             const sc = new Boom(u.lastDisconnect?.error)?.output?.statusCode;
-            console.log(chalk.yellow('Conexión cerrada - StatusCode:', sc));
 
             if (sc !== DisconnectReason.loggedOut) {
-                console.log(chalk.cyan('Reconectando en 3 segundos...'));
-                setTimeout(() => startBot(), 3000);
+                setTimeout(() => startBot(), 1500);
             } else {
-                console.log(chalk.red('Sesión cerrada. Borrando carpeta Session...'));
-
                 if (fs.existsSync(sDir)) {
                     try {
                         fs.rmSync(sDir, { recursive: true, force: true });
-                        console.log(chalk.gray('Carpeta Session eliminada'));
-                    } catch (e: any) {
-                        console.log(chalk.red('Error borrando Session:', e.message));
-                    }
+                    } catch {}
                 }
                 process.exit(0);
             }
@@ -197,7 +185,7 @@ async function startBot() {
             pCache.add(mId);
             mStore.set(mId, rawMsg);
 
-            if (pCache.size > 2000) {
+            if (pCache.size > 1000) {
                 const first = pCache.values().next().value;
                 if (first) {
                     pCache.delete(first);
@@ -205,16 +193,9 @@ async function startBot() {
                 }
             }
 
-            queueMicrotask(async () => {
-                try {
-                    const m = serialize(sock, rawMsg);
-                    if (!m) return;
-
-                    printMessageLog(m, sock).catch(() => {});
-                    await handler(sock, rawMsg);
-                } catch (err) {
-                    console.error(chalk.red('[ ERROR UPSERT ] Error en procesamiento:'), err);
-                }
+            queueMicrotask(() => {
+                handler(sock, rawMsg).catch(() => {});
+                printMessageLog(serialize(sock, rawMsg), sock).catch(() => {});
             });
         }
     });
@@ -223,11 +204,10 @@ async function startBot() {
     if (fs.existsSync(commandsPath)) {
         fs.watch(commandsPath, { recursive: true }, (_, filename) => {
             if (filename && (filename.endsWith('.ts') || filename.endsWith('.js'))) {
-                console.log(chalk.yellow(`\n[ AUTO-RELOAD ] Cambio detectado en ${filename}. Recargando plugins...`));
                 cargarPlugins('./commands').catch(() => {});
             }
         });
     }
 }
 
-startBot().catch(err => console.error('Error fatal al iniciar:', err));
+startBot().catch(() => {});
