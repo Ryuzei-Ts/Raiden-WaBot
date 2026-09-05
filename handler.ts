@@ -122,9 +122,12 @@ export const handler = (sock: any, rawMsg: any) => {
             };
 
             try {
-                cmd.run(ctx);
+                const res = cmd.run(ctx);
+                if (res && typeof res.catch === 'function') {
+                    res.catch((err: any) => console.error('Error en comando async:', err));
+                }
             } catch (err) {
-                console.error('Error ejecutando comando:', err);
+                console.error('Error en comando sync:', err);
             }
         };
 
