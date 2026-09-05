@@ -1,4 +1,4 @@
-import { loadDB } from '#db';
+import { db } from '#db';
 
 export default {
     command: ['e', 'evaldb'],
@@ -8,24 +8,45 @@ export default {
         const p = usedPrefix || prefix || '.';
         
         const subCmd = args[0]?.toLowerCase();
-        const db = (await loadDB()) || (global as any).db || {};
-
-        let targetData: any = null;
 
         if (subCmd === 'chat') {
-            targetData = db?.chats?.[chat] || {};
-        } else if (subCmd === 'user') {
+            const row = db.prepare('SELECT * FROM chats WHERE id = ?').get(chat);
+            
+            if (!row) return reply('{}');
+
+            if ((row as any).muteds) {
+                try { (row as any).muteds = JSON.parse((row as any).muteds); } catch {}
+            }
+
+            return reply(JSON.stringify(row, null, 2));
+        } 
+        
+        if (subCmd === 'user') {
             const targetUser = msg.mentionedJid?.[0] || msg.quoted?.sender || sender;
-            targetData = db?.users?.[targetUser] || {};
-        } else {
-            return reply(
-                ` Usa el comando de las siguientes formas:\n\n` +
-                `• *${p}e chat* - Muestra los datos del chat actual.\n` +
-                `• *${p}e user* - Muestra tus datos.\n` +
-                `• *${p}e user @usuario* - Muestra los datos del usuario mencionado.`
-            );
+            const cleanUser = targetUser.split('@')[0] + '@s.whatsapp.net';
+
+            const userGlobal = db.prepare('SELECT * FROM users WHERE id = ?').get(cleanUser) as any || {};
+            const userInChat = db.prepare('SELECT * FROM chat_users WHERE chat_id = ? AND user_id = ?').get(chat, cleanUser) as any || {};
+
+            if (userInChat.characters) {
+                try { userInChat.characters = JSON.parse(userInChat.characters); } catch {}
+            }
+
+            const mergedUserData = {
+                ...userGlobal,
+                ...userInChat
+            };
+
+            if (Object.keys(mergedUserData).length === 0) return reply('{}');
+
+            return reply(JSON.stringify(mergedUserData, null, 2));
         }
 
-        return reply(JSON.stringify(targetData, null, 2));
+        return reply(
+            ` Usa el comando de las siguientes formas:\n\n` +
+            `• *${p}e chat* - Muestra los datos del chat actual.\n` +
+            `• *${p}e user* - Muestra tus datos.\n` +
+            `• *${p}e user @usuario* - Muestra los datos del usuario mencionado.`
+        );
     }
 };
