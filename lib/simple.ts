@@ -71,21 +71,11 @@ export function serialize(sock: any, m: proto.IWebMessageInfo) {
 
     let rawMsg: any = m.message;
 
-    if (rawMsg.ephemeralMessage) {
-        rawMsg = rawMsg.ephemeralMessage.message;
-    }
-    if (rawMsg.viewOnceMessage) {
-        rawMsg = rawMsg.viewOnceMessage.message;
-    }
-    if (rawMsg.viewOnceMessageV2) {
-        rawMsg = rawMsg.viewOnceMessageV2.message;
-    }
-    if (rawMsg.viewOnceMessageV2Extension) {
-        rawMsg = rawMsg.viewOnceMessageV2Extension.message;
-    }
-    if (rawMsg.documentWithCaptionMessage) {
-        rawMsg = rawMsg.documentWithCaptionMessage.message;
-    }
+    if (rawMsg.ephemeralMessage) rawMsg = rawMsg.ephemeralMessage.message;
+    if (rawMsg.viewOnceMessage) rawMsg = rawMsg.viewOnceMessage.message;
+    if (rawMsg.viewOnceMessageV2) rawMsg = rawMsg.viewOnceMessageV2.message;
+    if (rawMsg.viewOnceMessageV2Extension) rawMsg = rawMsg.viewOnceMessageV2Extension.message;
+    if (rawMsg.documentWithCaptionMessage) rawMsg = rawMsg.documentWithCaptionMessage.message;
 
     const msgType = getContentType(rawMsg);
     if (!msgType) return null;
@@ -102,9 +92,12 @@ export function serialize(sock: any, m: proto.IWebMessageInfo) {
         '';
 
     const key = m.key;
-    const remoteJid = key.remoteJid || '';
-    const chat = decodeJid(remoteJid);
-    const sender = decodeJid(key.participant || remoteJid);
+    const remoteJid = decodeJid(key.remoteJid || '');
+    
+    const chat = UserJid(sock, remoteJid);
+    const rawSender = decodeJid(key.participant || remoteJid);
+    const sender = UserJid(sock, chat, rawSender);
+
     const isGroup = chat.endsWith('@g.us');
     const isBot = !!key.fromMe;
 
@@ -125,15 +118,18 @@ export function serialize(sock: any, m: proto.IWebMessageInfo) {
             quotedMsg?.caption ||
             '';
 
+        const quotedParticipant = decodeJid(contextInfo.participant || '');
+
         quoted = {
             type: quotedType,
             msg: quotedMsg,
             key: {
                 remoteJid: chat,
-                fromMe: contextInfo.participant === sock.user?.id,
+                fromMe: quotedParticipant === sock.user?.id,
                 id: contextInfo.stanzaId,
-                participant: contextInfo.participant
+                participant: UserJid(sock, chat, quotedParticipant)
             },
+            sender: UserJid(sock, chat, quotedParticipant),
             body: quotedBody
         };
     }
