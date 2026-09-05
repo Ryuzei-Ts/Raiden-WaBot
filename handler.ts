@@ -52,17 +52,17 @@ const checkAdmin = (sock: any, from: string, sender: string) => {
         const admins = getAdmins(metadata.participants);
         const botRawId = sock?.user?.id || '';
         
-        return UserJid(sock, from, botRawId).then((botJid: string) => {
-            return UserJid(sock, from, sender).then((targetJid: string) => {
-                const botId = decodeJid(botJid);
-                const botLid = sock?.user?.lid ? decodeJid(sock.user.lid) : null;
-                const targetSender = decodeJid(targetJid);
+        const botJid = UserJid(sock, from, botRawId);
+        const targetJid = UserJid(sock, from, sender);
 
-                const isUserAdmin = admins.some(admin => admin === targetSender);
-                const isBotAdmin = admins.some(admin => admin === botId || (botLid && admin === botLid));
-                return { isUserAdmin, isBotAdmin };
-            });
-        });
+        const botId = decodeJid(botJid);
+        const botLid = sock?.user?.lid ? decodeJid(sock.user.lid) : null;
+        const targetSender = decodeJid(targetJid);
+
+        const isUserAdmin = admins.some(admin => admin === targetSender);
+        const isBotAdmin = admins.some(admin => admin === botId || (botLid && admin === botLid));
+
+        return { isUserAdmin, isBotAdmin };
     }).catch(() => ({ isUserAdmin: false, isBotAdmin: false }));
 };
 
@@ -115,7 +115,10 @@ export const handler = (sock: any, rawMsg: any) => {
                 from: msg.from,
                 isGroup: msg.isGroup,
                 quoted: msg.quoted,
-                reply: msg.reply
+                reply: msg.reply,
+                edit: (text: string, key: any) => {
+                    return sock.sendMessage(msg.chat, { text, edit: key });
+                }
             };
 
             try {
