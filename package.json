@@ -5,8 +5,8 @@
   "main": "index.ts",
   "author": "Ryuzei-Ts",
   "scripts": {
-    "start": "node index.ts",
-    "dev": "nodemon index.ts"
+    "start": "node --loader ts-node/esm index.ts",
+    "dev": "nodemon --exec node --loader ts-node/esm index.ts"
   },
   "imports": {
     "#config": "./config.ts",
