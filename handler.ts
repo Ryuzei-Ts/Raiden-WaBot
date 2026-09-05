@@ -84,7 +84,15 @@ export const handler = (sock: any, rawMsg: any) => {
         if (!cmd) return;
 
         const owners = Array.isArray(config.owner) ? config.owner : [config.owner];
-        const isOwner = owners.some((num: string) => msg.sender.includes(num));
+        const cleanSender = msg.sender.replace(/[^0-9]/g, '');
+
+        const isOwner = owners.some((num: string) => {
+            const cleanNum = num.replace(/[^0-9]/g, '');
+            return (
+                cleanSender.includes(cleanNum) ||
+                cleanSender.replace(/^521/, '52') === cleanNum.replace(/^521/, '52')
+            );
+        });
 
         if (cmd.owner && !isOwner) {
             msg.reply('❌ Este comando solo puede ser utilizado por el dueño del bot.');
