@@ -1,5 +1,7 @@
 import fs from 'fs';
-import path from 'path';
+import { promises as fsPromises } from 'fs';
+import path, { join } from 'path';
+import { pathToFileURL } from 'url';
 import { proto, getContentType, jidDecode, downloadContentFromMessage } from '@whiskeysockets/baileys';
 
 export const lidCache = new Map<string, string>();
@@ -166,41 +168,40 @@ export interface Command {
 export const commands = new Map<string, Command>();
 
 export const loadCommands = async (dir = './commands') => {
-    const absoluteDir = path.resolve(dir);
-    if (!fs.existsSync(absoluteDir)) {
-        fs.mkdirSync(absoluteDir, { recursive: true });
-        return;
+    const cmdDir = path.resolve(dir);
+    if (!fs.existsSync(cmdDir)) return;
+
+    async function getAllFiles(directory: string): Promise<string[]> {
+        const entries = await fsPromises.readdir(directory, { withFileTypes: true });
+        const files = await Promise.all(entries.map(e => {
+            const res = join(directory, e.name);
+            return e.isDirectory() ? getAllFiles(res) : Promise.resolve([res]);
+        }));
+        return files.flat();
     }
 
-    const files = fs.readdirSync(absoluteDir);
+    const allFiles = await getAllFiles(cmdDir);
+    const files = allFiles.filter(f => 
+        (f.endsWith('.ts') || f.endsWith('.js')) && !f.endsWith('.d.ts')
+    );
 
-    for (const file of files) {
-        const fullPath = path.join(absoluteDir, file);
-        if (fs.statSync(fullPath).isDirectory()) {
-            await loadCommands(fullPath);
-        } else if (file.endsWith('.ts') || file.endsWith('.js')) {
+    const ts = Date.now();
+    await Promise.all(
+        files.map(async (fullPath) => {
             try {
-                const fileUrl = process.platform === 'win32' 
-                    ? `file:///${fullPath.replace(/\\/g, '/')}` 
-                    : `file://${fullPath}`;
+                const fileUrl = pathToFileURL(fullPath).href;
+                const cmd = await import(`${fileUrl}?update=${ts}`);
+                const cFile = cmd.default?.default || cmd.default || cmd;
 
-                const commandModule = await import(fileUrl);
-                const command: Command = commandModule.default?.default || commandModule.default || commandModule;
-
-                if (command && command.run && typeof command.run === 'function') {
-                    const cmdList = Array.isArray(command.command) 
-                        ? command.command 
-                        : [command.command];
-
-                    for (const alias of cmdList) {
-                        if (alias && typeof alias === 'string') {
-                            commands.set(alias.toLowerCase(), command);
-                        }
-                    }
+                if (cFile?.command && cFile?.run) {
+                    const aliases = Array.isArray(cFile.command) ? cFile.command : [cFile.command];
+                    aliases.forEach((alias: string) => {
+                        commands.set(alias.toLowerCase(), cFile);
+                    });
                 }
-            } catch (err) {
-                console.error(`Error cargando comando en ${fullPath}:`, err);
+            } catch (e) {
+                console.error(`[ ERROR COMANDO ] No se pudo cargar: ${fullPath}`, e);
             }
-        }
-    }
+        })
+    );
 };
