@@ -141,7 +141,7 @@ async function startBot() {
 
     if (fs.existsSync('./commands')) {
         fs.watch('./commands', { recursive: true }, async (_, filename) => {
-            if (filename && (filename.endsWith('.ts') || filename.endsWith('.js'))) {
+            if (filename && filename.endsWith('.ts')) {
                 console.log(chalk.yellow(`[HOT-RELOAD] Cambio en commands/${filename}. Recargando...`));
                 await loadCommands();
             }
