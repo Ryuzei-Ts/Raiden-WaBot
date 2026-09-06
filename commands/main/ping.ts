@@ -15,11 +15,10 @@ export default {
             if (!s?.key) return;
 
             const realLatency = Date.now() - start;
-            const latency = realLatency * 0.05;
-            const formattedMs = latency.toFixed(4).split(".")[0];
+            const latency = (realLatency * 0.05).toFixed(2);
 
             ctx.sock.sendMessage(jid, { 
-                text: `✰ ¡Pong!\n> Tiempo ⴵ ${formattedMs}ms`, 
+                text: `✰ ¡Pong!\n> Tiempo ⴵ ${latency}ms`, 
                 edit: s.key 
             }).catch(() => {});
         }).catch(() => {});
