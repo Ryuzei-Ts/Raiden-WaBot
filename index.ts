@@ -15,6 +15,8 @@ import readline from 'readline';
 import qrcode from 'qrcode';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
+import { LRUCache } from 'lru-cache';
+import debounce from 'lodash.debounce';
 
 import { serialize } from '#simple';
 import { loadDB } from '#db';
@@ -42,13 +44,8 @@ wss.on('connection', (ws) => {
     clients.add(ws);
     ws.send(JSON.stringify({ type: 'status', data: 'Connected to Raiden-WaBot Realtime Stream' }));
 
-    ws.on('close', () => {
-        clients.delete(ws);
-    });
-
-    ws.on('error', (err) => {
-        console.error(chalk.red('WebSocket Client Error:'), err);
-    });
+    ws.on('close', () => clients.delete(ws));
+    ws.on('error', (err) => console.error(chalk.red('WebSocket Client Error:'), err));
 });
 
 export function broadcast(event: string, payload: any) {
@@ -65,8 +62,10 @@ export function broadcast(event: string, payload: any) {
 
 const sDir = path.join(__dirname, 'Session');
 
-const pCache = new Set<string>();
-const mStore = new Map<string, any>();
+const mStore = new LRUCache<string, any>({
+    max: 1000,
+    ttl: 1000 * 60 * 5
+});
 
 const methodCodeQR = process.argv.includes("--qr");
 const methodCode = process.argv.includes("code");
@@ -289,25 +288,17 @@ async function startBot() {
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type !== 'notify') return;
 
-        for (const rawMsg of messages) {
+        for (let i = 0; i < messages.length; i++) {
+            const rawMsg = messages[i];
             if (!rawMsg?.message || !rawMsg?.key?.id) continue;
             
             const jid = rawMsg.key.remoteJid || '';
             if (jid === 'status@broadcast' || jid.endsWith('@broadcast')) continue;
 
             const mId = rawMsg.key.id;
-            if (pCache.has(mId)) continue;
-
-            pCache.add(mId);
+            
+            if (mStore.has(mId)) continue;
             mStore.set(mId, rawMsg);
-
-            if (pCache.size > 1000) {
-                const first = pCache.values().next().value;
-                if (first) {
-                    pCache.delete(first);
-                    mStore.delete(first);
-                }
-            }
 
             queueMicrotask(() => {
                 handler(sock, rawMsg).catch(() => {});
@@ -319,9 +310,13 @@ async function startBot() {
 
     const commandsPath = path.join(__dirname, 'commands');
     if (fs.existsSync(commandsPath)) {
+        const reloadCommandsDebounced = debounce(() => {
+            cargarPlugins('./commands').catch(() => {});
+        }, 300);
+
         fs.watch(commandsPath, { recursive: true }, (_, filename) => {
             if (filename && (filename.endsWith('.ts') || filename.endsWith('.js'))) {
-                cargarPlugins('./commands').catch(() => {});
+                reloadCommandsDebounced();
             }
         });
     }
