@@ -61,7 +61,7 @@ export default {
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'sending_image' });
 
-            const caption = `﹒𝜗ৎ      ࣪  *Logo Corazón*\n\nׅ  ׄ  ✿ *Texto* » ${text}\n\nׅ  ׄ  ✿ *¡Logo generado con éxito!*`.trim();
+            const caption = `  ׄ  ✿ *¡Logo generado con éxito!*`.trim();
 
             const result = await sock.sendMessage(chat, { 
                 image: imageBuffer, 
