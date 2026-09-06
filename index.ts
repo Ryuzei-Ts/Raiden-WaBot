@@ -12,6 +12,7 @@ import fs, { promises as fsPromises } from 'fs';
 import path, { join, dirname } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import readline from 'readline';
+import qrcode from 'qrcode';
 
 import { serialize } from '#simple';
 import { loadDB } from '#db';
@@ -154,9 +155,11 @@ async function startBot() {
         saveCreds = reloadedAuth.saveCreds;
     }
 
+    const esQR = opcion === '1' || methodCodeQR;
+
     const sock = makeWASocket({
         logger: P({ level: 'silent' }) as any,
-        printQRInTerminal: opcion === '1',
+        printQRInTerminal: false,
         version,
         browser: Browsers.macOS('Safari'),
         auth: {
@@ -199,7 +202,17 @@ async function startBot() {
     });
 
     sock.ev.on('connection.update', async (u) => {
-        const { connection, lastDisconnect } = u;
+        const { connection, lastDisconnect, qr } = u;
+
+        if (qr && esQR) {
+            try {
+                const qrTerminal = await qrcode.toString(qr, { type: 'terminal', small: true });
+                console.log(chalk.bold.cyan('\n[ QR ] ESCANEA EL SIGUIENTE CÓDIGO QR:\n'));
+                console.log(qrTerminal);
+            } catch (err) {
+                console.log(chalk.red('[ ERROR ] Error al renderizar el código QR:'), err);
+            }
+        }
 
         if (connection === 'open') {
             (global as any).mainConn = sock;
