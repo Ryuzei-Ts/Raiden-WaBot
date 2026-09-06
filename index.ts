@@ -21,6 +21,19 @@ const sDir = path.join(__dirname, 'Session');
 const pCache = new Set<string>();
 const mStore = new Map<string, any>();
 
+const methodCodeQR = process.argv.includes("--qr");
+const methodCode = process.argv.includes("code");
+
+function normalizePhone(input: any) {
+  let s = String(input).replace(/\D/g, '');
+  if (!s) return '';
+  if (s.startsWith('0')) s = s.replace(/^0+/, '');
+  if (s.length === 10 && s.startsWith('3')) s = '57' + s;
+  if (s.startsWith('52') && !s.startsWith('521') && s.length >= 12) s = '521' + s.slice(2);
+  if (s.startsWith('54') && !s.startsWith('549') && s.length >= 11) s = '549' + s.slice(2);
+  return s;
+}
+
 async function cargarPlugins(dir = './commands') {
     const cmdDir = path.resolve(__dirname, dir);
     if (!fs.existsSync(cmdDir)) return;
@@ -66,7 +79,7 @@ const limpiarSesion = () => {
     if (fs.existsSync(sDir)) {
         try {
             fs.rmSync(sDir, { recursive: true, force: true });
-            console.log(chalk.white(`[ ${chalk.cyan('SYSTEM')} ] Sesión eliminada por error crítico.`));
+            console.log(chalk.white(`[ ${chalk.cyan('SYSTEM')} ] Sesión eliminada por error crítico o nuevo intento.`));
         } catch (err) {
             console.log(chalk.white('[ ERROR ] No se pudo limpiar la sesión:'), err);
         }
@@ -84,15 +97,29 @@ async function startBot() {
     let usarCodigo: boolean = false;
 
     if (!state.creds.registered) {
-        let lineM = '⋯ ⋯ ⋯ ⋯ ⋯ ⋯ ⋯ ⋯ ⋯ ⋯ ⋯ 》';
-        console.log(chalk.white(`╭${lineM}`));
-        opcion = await askQuestion(
-            `┊ ${chalk.bold.cyan(' METODO DE VINCULACION ')}\n` +
-            `┊ ${chalk.bold.white('⇢ Opcion 1:')} ${chalk.cyan('Codigo QR.')}\n` +
-            `┊ ${chalk.bold.white('⇢ Opcion 2:')} ${chalk.cyan('Codigo de 8 digitos.')}\n` +
-            `╰${lineM}\n${chalk.bold.white('---> ')}`
-        );
-        usarCodigo = opcion === "2";
+        limpiarSesion();
+        
+        console.log(chalk.cyan(`
+      Raiden | Wa Bot
+     Powered by Ryuzei-Ts 
+`));
+
+        if (methodCodeQR) {
+            opcion = '1';
+        } else if (methodCode) {
+            opcion = '2';
+            usarCodigo = true;
+        } else {
+            let lineM = '⋯ ⋯ ⋯ ⋯ ⋯ ⋯ ⋯ ⋯ ⋯ ⋯ ⋯ 》';
+            console.log(chalk.white(`╭${lineM}`));
+            opcion = await askQuestion(
+                `┊ ${chalk.bold.cyan(' METODO DE VINCULACION ')}\n` +
+                `┊ ${chalk.bold.white('⇢ Opcion 1:')} ${chalk.cyan('Codigo QR.')}\n` +
+                `┊ ${chalk.bold.white('⇢ Opcion 2:')} ${chalk.cyan('Codigo de 8 digitos.')}\n` +
+                `╰${lineM}\n${chalk.bold.white('---> ')}`
+            );
+            usarCodigo = opcion === "2";
+        }
     }
 
     const sock = makeWASocket({
@@ -120,11 +147,7 @@ async function startBot() {
     if (usarCodigo && !state.creds.registered) {
         displayLoadingMessage();
         let num = await askQuestion('');
-        num = num.replace(/[^0-9]/g, '');
-        
-        if (num.startsWith('521') && num.length === 13) {
-            num = '52' + num.slice(3);
-        }
+        num = normalizePhone(num);
 
         setTimeout(async () => {
             try {
