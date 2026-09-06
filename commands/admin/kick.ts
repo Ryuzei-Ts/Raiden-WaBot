@@ -5,7 +5,7 @@ const normalizeNumber = (x: string) => String(x || "").split("@")[0].split(":")[
 export default {
     command: ['kick', 'ban', 'expulsar', 'eular'],
     description: 'Expulsa a un participante del grupo',
-    category: 'grupo',
+    category: 'admin',
     group: true,
     admin: true,
     botAdmin: true,
