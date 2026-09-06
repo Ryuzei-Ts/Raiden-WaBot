@@ -19,7 +19,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { serialize } from '#simple';
 import { loadDB } from '#db';
 import config from '#config';
-import { handler } from '#handler';
+import { handler, invalidateGroupCache } from '#handler';
 import printMessageLog from './lib/printlog.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -239,6 +239,12 @@ async function startBot() {
 
     sock.ev.on('creds.update', async () => {
         await saveCreds();
+    });
+
+    sock.ev.on('group-participants.update', async (update) => {
+        const { id, action } = update;
+        invalidateGroupCache(id);
+        broadcast('group_updated', { chatId: id, action });
     });
 
     sock.ev.on('connection.update', async (u) => {
