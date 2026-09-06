@@ -12,7 +12,6 @@ const MAX_GROUP_CACHE = handlerConfig.maxGroupCache || 500;
 const MAX_PROCESSED_MSGS = handlerConfig.maxProcessedMsgs || 2000;
 const RATE_LIMIT_WINDOW_MS = handlerConfig.rateLimitWindow || 3000;
 const MAX_COMMANDS_PER_WINDOW = handlerConfig.maxCommandsPerWindow || 5;
-const COMMAND_TIMEOUT_MS = 5000;
 
 const groupMetaCache = new LRUCache<string, { metadata: any; ts: number }>({
     max: MAX_GROUP_CACHE,
@@ -293,17 +292,7 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         });
 
         try {
-            let timerId: NodeJS.Timeout;
-            const timeoutPromise = new Promise((_, reject) => {
-                timerId = setTimeout(() => reject(new Error('TIMEOUT')), COMMAND_TIMEOUT_MS);
-            });
-
-            const result = await Promise.race([
-                Promise.resolve(cmd._exec(ctx)),
-                timeoutPromise
-            ]).finally(() => {
-                clearTimeout(timerId);
-            });
+            const result = await cmd._exec(ctx);
             
             queueMicrotask(() => {
                 broadcast('command_executed', {
