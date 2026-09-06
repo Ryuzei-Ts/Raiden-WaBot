@@ -10,12 +10,11 @@ export default {
     admin: true,
     botAdmin: true,
     run: async ({ chat, m, sock, msg, args }: any) => {
-        const q = args[0];
-        let target = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || 
-                     m.mentionedJid?.[0] ||
-                     msg.message?.extendedTextMessage?.contextInfo?.participant || 
-                     m.quoted?.sender ||
-                     (q ? q.replace(/[^0-9]/g, '') + '@s.whatsapp.net' : null);
+        const q = args?.[0];
+        const target = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || 
+                       m.mentionedJid?.[0] || 
+                       m.quoted?.sender || 
+                       (q ? q.replace(/[^0-9]/g, '') + '@s.whatsapp.net' : null);
 
         if (!target || target === '@s.whatsapp.net') {
             return msg.reply('✰ Etiqueta o responde al mensaje del usuario que deseas degradar.');
@@ -30,39 +29,15 @@ export default {
         }
 
         const ownerConfig = config.owner;
-        let isBotOwner = false;
-
-        if (ownerConfig instanceof Set) {
-            isBotOwner = ownerConfig.has(targetBase);
-        } else if (Array.isArray(ownerConfig)) {
-            isBotOwner = ownerConfig.some((num: string) => normalizeNumber(num) === targetBase);
-        }
+        const isBotOwner = ownerConfig instanceof Set ? ownerConfig.has(targetBase) : Array.isArray(ownerConfig) && ownerConfig.some((num: string) => normalizeNumber(num) === targetBase);
 
         if (isBotOwner) {
             return msg.reply('✰ No puedes quitarle el administrador a un Owner del bot.');
         }
 
-        const metadata = await sock.groupMetadata(chat).catch(() => null);
-        const participants = metadata?.participants || [];
-        const targetParticipant = participants.find((p: any) => 
-            normalizeNumber(p.id) === targetBase || normalizeNumber(p.lid) === targetBase || normalizeNumber(p.phoneNumber) === targetBase
-        );
-
-        const isAdmin = targetParticipant?.admin === 'admin' || targetParticipant?.admin === 'superadmin';
-        if (!isAdmin) {
-            return sock.sendMessage(chat, { 
-                text: `✰ El usuario @${target.split('@')[0]} no está en la lista de administradores.`, 
-                mentions: [target] 
-            }, { quoted: m });
-        }
-
-        if (targetParticipant?.admin === 'superadmin' || metadata?.owner === target) {
-            return msg.reply('✰ No puedes quitarle el administrador al creador/superadmin del grupo.');
-        }
-
         await sock.groupParticipantsUpdate(chat, [target], 'demote').catch(() => {});
         return sock.sendMessage(chat, { 
-            text: `✰ Se le ha quitado el administrador a @${target.split('@')[0]}.`, 
+            text: `✰ Se le ha quitado el administrador a @${targetBase}.`, 
             mentions: [target] 
         }, { quoted: m });
     }
