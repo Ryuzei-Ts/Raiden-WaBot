@@ -5,10 +5,10 @@ export default {
     description: 'Muestra el contacto del creador del bot',
     category: 'main',
     group: true,
-    run: async (ctx: any) => {
+    run: (ctx: any) => {
         const { sock, msg, chat } = ctx;
 
-        const ownerNumber = config.owner[0];
+        const ownerNumber = config.owner.values().next().value;
         const ownerName = config.devName;
 
         const vcard = 
@@ -19,7 +19,7 @@ export default {
             `TEL;type=CELL;type=VOICE;waid=${ownerNumber}:${ownerNumber}\n` +
             `END:VCARD`;
 
-        await sock.sendMessage(chat, {
+        return sock.sendMessage(chat, {
             contacts: {
                 displayName: ownerName,
                 contacts: [{ vcard }]
