@@ -57,6 +57,7 @@ function isParticipantAdmin(participants: any[], userBase: string) {
 const normalizeNumber = (x: string) => String(x || "").split("@")[0].split(":")[0].replace(/[^\d]/g, "").trim();
 
 export const handler = async (sock: any, rawMsg: any) => {
+    const startTime = Date.now();
     try {
         const msgId = rawMsg?.key?.id;
         if (msgId) {
@@ -64,15 +65,20 @@ export const handler = async (sock: any, rawMsg: any) => {
             processedMsgIds.add(msgId);
             setTimeout(() => processedMsgIds.delete(msgId), msgTtl);
         }
+
         const msg = serialize(sock, rawMsg);
         if (!msg || !msg.body) return;
+
         const chat = msg.chat || msg.from || rawMsg?.key?.remoteJid;
         if (!chat) return;
+
         const prefix = config.prefix || '.';
         if (!msg.body.startsWith(prefix)) return;
+
         const args = msg.body.slice(prefix.length).trim().split(/ +/);
         const commandName = args.shift()?.toLowerCase();
         if (!commandName) return;
+
         syncCommandMap();
         const cmd = commandMap.get(commandName);
         if (!cmd) return;
@@ -82,30 +88,53 @@ export const handler = async (sock: any, rawMsg: any) => {
             command: commandName,
             chat,
             sender: msg.sender,
-            isGroup: msg.isGroup
+            isGroup: msg.isGroup,
+            timestamp: startTime
         });
 
         queueMicrotask(() => { registerData(sock, msg).catch(() => {}); });
+
         let realJid = msg.sender;
         try { realJid = UserJid(sock, chat, msg.sender) || msg.sender; } catch { realJid = msg.sender; }
         const normalizedSender = normalizeNumber(realJid);
         const altSender = normalizedSender.startsWith('521') ? normalizedSender.replace(/^521/, '52') : (normalizedSender.startsWith('52') ? normalizedSender.replace(/^52/, '521') : normalizedSender);
+        
         const groupMetadata = msg.isGroup ? await getGroupMetadata(sock, chat) : null;
+        
         const ownerConfig = config.owner;
         let isOwner = false;
         if (ownerConfig instanceof Set) { isOwner = ownerConfig.has(normalizedSender) || ownerConfig.has(altSender); } 
         else if (Array.isArray(ownerConfig)) { isOwner = ownerConfig.some((num: string) => { const cleanNum = normalizeNumber(num); return normalizedSender === cleanNum || altSender === cleanNum; }); }
-        if (cmd.owner && !isOwner) { msg.reply('ׅ  ׄ  ✿ Este comando solo puede ser utilizado por el dueño del bot.'); return; }
-        if (cmd.group && !msg.isGroup) { msg.reply('ׅ  ׄ  ✿ Este comando solo se puede usar en grupos.'); return; }
+
+        if (cmd.owner && !isOwner) { 
+            msg.reply('ׅ  ׄ  ✿ Este comando solo puede ser utilizado por el dueño del bot.'); 
+            return; 
+        }
+
+        if (cmd.group && !msg.isGroup) { 
+            msg.reply('ׅ  ׄ  ✿ Este comando solo se puede usar en grupos.'); 
+            return; 
+        }
+
         const participants = groupMetadata?.participants || [];
         const isAdmins = msg.isGroup ? (isParticipantAdmin(participants, normalizedSender) || isParticipantAdmin(participants, altSender)) : false;
         const rawBotJid = sock.user?.id || sock.user?.jid || '';
         const botBase = normalizeNumber(rawBotJid);
         const isBotAdmins = msg.isGroup ? isParticipantAdmin(participants, botBase) : false;
-        if (cmd.admin && !isAdmins && !isOwner) { msg.reply('ׅ  ׄ  ✿ Necesitas ser administrador del grupo para usar este comando.'); return; }
-        if (cmd.botAdmin && !isBotAdmins) { msg.reply('ׅ  ׄ  ✿ El bot necesita ser administrador del grupo para ejecutar este comando.'); return; }
+
+        if (cmd.admin && !isAdmins && !isOwner) { 
+            msg.reply('ׅ  ׄ  ✿ Necesitas ser administrador del grupo para usar este comando.'); 
+            return; 
+        }
+
+        if (cmd.botAdmin && !isBotAdmins) { 
+            msg.reply('ׅ  ׄ  ✿ El bot necesita ser administrador del grupo para ejecutar este comando.'); 
+            return; 
+        }
+
         const cleanSender = realJid.split('@')[0].split(':')[0] + '@s.whatsapp.net';
         const dbData = (global as any).db?.data;
+
         queueMicrotask(() => {
             if (dbData) {
                 if (!dbData.users) dbData.users = {};
@@ -126,17 +155,55 @@ export const handler = async (sock: any, rawMsg: any) => {
                 });
             }
         });
-        const ctx = { ...msg, sock, m: msg, msg, args, command: commandName, prefix, usedPrefix: prefix, owner: isOwner, admin: isAdmins, botAdmin: isBotAdmins, chat, db: (global as any).db, user: dbData?.users?.[cleanSender] || {}, chatDb: dbData?.chats?.[chat] || {}, edit: (text: string, key: any) => { if (!key) return Promise.resolve(null); return sock.sendMessage(chat, { text, edit: key }); } };
+
+        const ctx = { 
+            ...msg, 
+            sock, 
+            m: msg, 
+            msg, 
+            args, 
+            command: commandName, 
+            prefix, 
+            usedPrefix: prefix, 
+            owner: isOwner, 
+            admin: isAdmins, 
+            botAdmin: isBotAdmins, 
+            chat, 
+            db: (global as any).db, 
+            user: dbData?.users?.[cleanSender] || {}, 
+            chatDb: dbData?.chats?.[chat] || {}, 
+            edit: (text: string, key: any) => { 
+                if (!key) return Promise.resolve(null); 
+                return sock.sendMessage(chat, { text, edit: key }); 
+            } 
+        };
         
         if (cmd._exec) {
-            broadcast('command_executing', { command: commandName, chat, sender: cleanSender });
-            return await cmd._exec(ctx);
+            broadcast('command_executing', { 
+                command: commandName, 
+                chat, 
+                sender: cleanSender 
+            });
+
+            const result = await cmd._exec(ctx);
+
+            broadcast('command_executed', { 
+                command: commandName, 
+                chat, 
+                sender: cleanSender, 
+                executionTimeMs: Date.now() - startTime 
+            });
+
+            return result;
         }
     } catch (e: any) {
         if (e?.message?.includes('rate-overlimit') || e?.status === 429) return;
         if (!e?.message?.includes('jidDecode')) {
             console.error(chalk.red('Error en handler:'), e);
-            broadcast('handler_error', { error: e?.message || 'Unknown error' });
+            broadcast('handler_error', { 
+                error: e?.message || 'Unknown error',
+                stack: e?.stack 
+            });
         }
     }
 };
