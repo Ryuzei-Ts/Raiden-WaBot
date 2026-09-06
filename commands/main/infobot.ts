@@ -1,6 +1,7 @@
 import { prepareWAMessageMedia } from '@whiskeysockets/baileys';
 import os from 'os';
 import config from '#config';
+import { broadcast } from '#index';
 
 function formatUptime(seconds: number): string {
     const d = Math.floor(seconds / (3600 * 24));
@@ -30,13 +31,31 @@ export default {
 
         const botUptime = formatUptime(process.uptime());
         
-        const totalMem = (os.totalmem() / 1024 / 1024 / 1024).toFixed(2);
-        const freeMem = (os.freemem() / 1024 / 1024 / 1024).toFixed(2);
+        const totalMemNum = os.totalmem() / 1024 / 1024 / 1024;
+        const freeMemNum = os.freemem() / 1024 / 1024 / 1024;
+        const totalMem = totalMemNum.toFixed(2);
+        const freeMem = freeMemNum.toFixed(2);
         const cpus = os.cpus();
         const cpuModel = cpus[0]?.model.trim() || 'Desconocido';
         const cpuCores = cpus.length;
         const platformName = os.type() + ' ' + os.release();
         const arch = os.arch();
+
+        queueMicrotask(() => {
+            broadcast('bot_info_requested', {
+                chat,
+                requestedBy: msg.sender,
+                systemStats: {
+                    uptimeSeconds: process.uptime(),
+                    freeMemGB: freeMemNum,
+                    totalMemGB: totalMemNum,
+                    cpuModel,
+                    cpuCores,
+                    platform: platformName,
+                    arch
+                }
+            });
+        });
 
         const textMessage = 
             `✿ Información del Bot *${config.botName}*\n\n` +
