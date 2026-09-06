@@ -115,8 +115,6 @@ async function startBot() {
         defaultQueryTimeoutMs: undefined,
         retryRequestDelayMs: 100,
         getMessage: async () => undefined,
-        headless: true,
-        browser: Browsers.ubuntu('Chrome'),
         options: {
             args: [
                 '--no-sandbox',
@@ -207,3 +205,7 @@ async function startBot() {
 }
 
 startBot().catch(() => {});
+
+process.on('uncaughtException', () => {});
+process.on('unhandledRejection', () => {});
+process.on('uncaughtExceptionMonitor', () => {});
