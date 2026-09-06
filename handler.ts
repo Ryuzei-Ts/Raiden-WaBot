@@ -36,15 +36,13 @@ setInterval(() => {
 
 const normalizeNumber = (x: string) => String(x || "").split("@")[0].split(":")[0].replace(/[^\d]/g, "").trim();
 
-const getAlternativeSenderVariants = (normalizedNumberStr: string): string[] => {
-    const variants = [normalizedNumberStr];
-    if (normalizedNumberStr.startsWith('521')) {
-        variants.push(normalizedNumberStr.replace(/^521/, '52'));
-    } else if (normalizedNumberStr.startsWith('52') && normalizedNumberStr.length >= 12) {
-        variants.push(normalizedNumberStr.replace(/^52/, '521'));
-    }
-    return variants;
-};
+function isParticipantAdmin(participants: any[], userBase: string) {
+    if (!participants || !userBase) return false;
+    return participants.some(p => {
+        if (p.admin !== 'admin' && p.admin !== 'superadmin') return false;
+        return (p.id?.split('@')[0] === userBase || p.lid?.split('@')[0] === userBase || p.phoneNumber?.split('@')[0] === userBase);
+    });
+}
 
 const commandMap = new Map<string, any>();
 let lastPluginsRef: any = null;
@@ -87,35 +85,6 @@ function backgroundFetchGroupMetadata(sock: any, chatId: string): void {
             }
         })
         .catch(() => {});
-}
-
-function getAdminSet(participants: any[]): Set<string> {
-    const adminSet = new Set<string>();
-    if (!participants) return adminSet;
-    for (let i = 0; i < participants.length; i++) {
-        const p = participants[i];
-        if (p.admin === 'admin' || p.admin === 'superadmin') {
-            if (p.id) adminSet.add(normalizeNumber(p.id));
-            if (p.lid) adminSet.add(normalizeNumber(p.lid));
-            if (p.phoneNumber) adminSet.add(normalizeNumber(p.phoneNumber));
-        }
-    }
-    return adminSet;
-}
-
-function checkIsOwner(normalizedSender: string): boolean {
-    const ownerConfig = (config as any)?.owner;
-    if (!ownerConfig) return false;
-    const variants = getAlternativeSenderVariants(normalizedSender);
-    if (ownerConfig instanceof Set) {
-        return variants.some(v => ownerConfig.has(v));
-    } else if (Array.isArray(ownerConfig)) {
-        return ownerConfig.some((num: string) => {
-            const cleanNum = normalizeNumber(num);
-            return variants.includes(cleanNum);
-        });
-    }
-    return false;
 }
 
 function checkRateLimit(sender: string): boolean {
@@ -184,6 +153,10 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
     const normalizedSender = normalizeNumber(realJidResult);
     if (checkRateLimit(normalizedSender)) return;
 
+    const altSender = normalizedSender.startsWith('521') 
+        ? normalizedSender.replace(/^521/, '52') 
+        : (normalizedSender.startsWith('52') ? normalizedSender.replace(/^52/, '521') : normalizedSender);
+
     const isGroup = msg.isGroup;
     let groupMetadata = isGroup ? getCachedGroupMetadata(chat) : null;
     
@@ -191,7 +164,16 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         backgroundFetchGroupMetadata(sock, chat);
     }
 
-    const isOwner = checkIsOwner(normalizedSender);
+    const ownerConfig = (config as any)?.owner;
+    let isOwner = false;
+    if (ownerConfig instanceof Set) { 
+        isOwner = ownerConfig.has(normalizedSender) || ownerConfig.has(altSender); 
+    } else if (Array.isArray(ownerConfig)) { 
+        isOwner = ownerConfig.some((num: string) => { 
+            const cleanNum = normalizeNumber(num); 
+            return normalizedSender === cleanNum || altSender === cleanNum; 
+        }); 
+    }
 
     if (cmd.owner && !isOwner) {
         return msg.reply('ׅ  ׄ  ✿ Este comando solo puede ser utilizado por el dueño del bot.');
@@ -200,19 +182,12 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         return msg.reply('ׅ  ׄ  ✿ Este comando solo se puede usar en grupos.');
     }
 
-    let isAdmins = false;
-    let isBotAdmins = false;
-
-    if (isGroup && groupMetadata?.participants) {
-        const adminSet = getAdminSet(groupMetadata.participants);
-        const senderVariants = getAlternativeSenderVariants(normalizedSender);
-        isAdmins = senderVariants.some(v => adminSet.has(v));
-        
-        const rawBotJid = sock.user?.id || sock.user?.jid || '';
-        const botBase = normalizeNumber(rawBotJid);
-        const botVariants = getAlternativeSenderVariants(botBase);
-        isBotAdmins = botVariants.some(v => adminSet.has(v));
-    }
+    const participants = groupMetadata?.participants || [];
+    const isAdmins = isGroup ? (isParticipantAdmin(participants, normalizedSender) || isParticipantAdmin(participants, altSender)) : false;
+    
+    const rawBotJid = sock.user?.id || sock.user?.jid || '';
+    const botBase = normalizeNumber(rawBotJid);
+    const isBotAdmins = isGroup ? isParticipantAdmin(participants, botBase) : false;
 
     if (cmd.admin && !isAdmins && !isOwner) {
         return msg.reply('ׅ  ׄ  ✿ Necesitas ser administrador del grupo para usar este comando.');
