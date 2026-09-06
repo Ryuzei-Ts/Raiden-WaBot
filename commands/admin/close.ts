@@ -6,6 +6,12 @@ export default {
     admin: true,
     botAdmin: true,
     run: async ({ chat, sock, args, msg }: any) => {
+        const groupMetadata = await sock.groupMetadata(chat).catch(() => null);
+
+        if (groupMetadata?.announce) {
+            return msg.reply('✰ El grupo *ya se encuentra cerrado*.');
+        }
+
         const timeStr = args?.[0];
         const match = timeStr?.match(/^(\d+)(s|m|h)$/i);
 
@@ -20,8 +26,12 @@ export default {
 
         msg.reply(`✰ El grupo se *cerrará* automáticamente en *${value}${unit}*.`);
 
-        setTimeout(() => {
-            sock.groupSettingUpdate(chat, 'announcement').catch(() => {});
+        setTimeout(async () => {
+            const currentMeta = await sock.groupMetadata(chat).catch(() => null);
+            if (!currentMeta?.announce) {
+                await sock.groupSettingUpdate(chat, 'announcement').catch(() => {});
+                await msg.reply('✰ El temporizador ha finalizado. El grupo ha sido *cerrado*.');
+            }
         }, delay);
     }
 };
