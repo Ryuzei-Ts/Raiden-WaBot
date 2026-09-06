@@ -1,7 +1,7 @@
 export default {
     command: ['cerrar', 'close'],
     description: 'Cierra el grupo inmediatamente o con temporizador',
-    category: 'grupo',
+    category: 'admin',
     group: true,
     admin: true,
     botAdmin: true,
