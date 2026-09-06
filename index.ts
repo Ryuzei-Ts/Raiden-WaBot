@@ -115,16 +115,13 @@ async function startBot() {
         fs.mkdirSync(sDir, { recursive: true });
     }
 
-    const { state, saveCreds } = await useMultiFileAuthState(sDir);
+    let { state, saveCreds } = await useMultiFileAuthState(sDir);
     const { version } = await fetchLatestBaileysVersion();
 
     let opcion: string = '';
     let usarCodigo: boolean = false;
 
     if (!state.creds.registered) {
-        limpiarSesion();
-        if (!fs.existsSync(sDir)) fs.mkdirSync(sDir, { recursive: true });
-
         console.log(chalk.cyan(`
       Raiden | Wa Bot
      Powered by Ryuzei-Ts 
@@ -146,13 +143,20 @@ async function startBot() {
             );
             usarCodigo = opcion === "2";
         }
+
+        limpiarSesion();
+        if (!fs.existsSync(sDir)) fs.mkdirSync(sDir, { recursive: true });
+        
+        const reloadedAuth = await useMultiFileAuthState(sDir);
+        state = reloadedAuth.state;
+        saveCreds = reloadedAuth.saveCreds;
     }
 
     const sock = makeWASocket({
         logger: P({ level: 'silent' }) as any,
         printQRInTerminal: opcion === '1',
         version,
-        browser: Browsers.ubuntu('Chrome'),
+        browser: Browsers.macOS('Safari'),
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'silent' }) as any)
@@ -182,6 +186,8 @@ async function startBot() {
                 console.log(chalk.white.bgBlue(` CODIGO DE VINCULACION `), chalk.white(`: ${code}`));
             } catch (err) {
                 console.log(chalk.white('[ ERROR ] solicitud de codigo:'), err);
+                limpiarSesion();
+                setTimeout(() => startBot(), 1500);
             }
         }, 1500);
     }
@@ -195,13 +201,14 @@ async function startBot() {
         }
 
         if (u.connection === 'close') {
-            const sc = new Boom(u.lastDisconnect?.error)?.output?.statusCode;
+            const statusCode = new Boom(u.lastDisconnect?.error)?.output?.statusCode;
 
-            if (sc !== DisconnectReason.loggedOut) {
+            if (statusCode === DisconnectReason.loggedOut || statusCode === DisconnectReason.connectionClosed || statusCode === 515) {
+                limpiarSesion();
                 setTimeout(() => startBot(), 1500);
             } else {
                 limpiarSesion();
-                process.exit(0);
+                setTimeout(() => startBot(), 1500);
             }
         }
     });
