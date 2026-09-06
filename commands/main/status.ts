@@ -29,8 +29,7 @@ export default {
     category: 'main',
     group: true,
     run: async (ctx: any) => {
-        const { sock, msg, chat, usedPrefix, prefix } = ctx;
-        const p = usedPrefix || prefix || config.prefix;
+        const { sock, msg, chat } = ctx;
 
         const uptime = process.uptime();
         const botUptime = formatUptime(uptime);
@@ -41,12 +40,10 @@ export default {
         const rss = formatBytes(memUsage.rss);
         
         const totalMem = formatBytes(os.totalmem());
-        const freeMem = formatBytes(os.freemem());
         const usedMem = formatBytes(os.totalmem() - os.freemem());
         const memPercent = ((os.totalmem() - os.freemem()) / os.totalmem() * 100).toFixed(1);
         
         const cpus = os.cpus();
-        const cpuModel = cpus[0]?.model.trim() || 'Desconocido';
         const cpuCores = cpus.length;
         
         const loadAvg = os.loadavg();
@@ -57,10 +54,14 @@ export default {
         const platform = os.platform();
         const release = os.release();
         const arch = os.arch();
-        const hostname = os.hostname();
+        let hostname = os.hostname();
         
         const nodeVersion = process.version;
         const pid = process.pid;
+
+        if (hostname.length > 10 || hostname.includes('-')) {
+            hostname = 'Local';
+        }
 
         const textMessage = 
             `「✦」Estado de *${config.botName}* ^●ω●^\n\n` +
@@ -72,7 +73,7 @@ export default {
             `❒ Node.js » ${nodeVersion}\n` +
             `❒ Uptime » ${botUptime}\n` +
             `❒ PID » ${pid}\n\n` +
-            `➤ *${config.botName} está funcionando correctamente ✅*`;
+            `> *${config.botName} está funcionando correctamente*`;
 
         await sock.sendMessage(chat, {
             text: textMessage,
