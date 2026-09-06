@@ -1,21 +1,28 @@
+import { broadcast } from '#index';
+
 export default {
     command: ['ping', 'p'],
     description: 'Verifica la velocidad de respuesta del bot',
     category: 'main',
     group: true,
-    run: ({ chat, m, sock }: any) => {
-        const jid = chat || m?.chat;
-        if (!jid) return;
-
+    run: async ({ chat, m, sock }: any) => {
         const start = Date.now();
+        const msgTime = m.messageTimestamp ? Number(m.messageTimestamp) * 1000 : start;
+        const speedMs = Math.max(0, start - msgTime);
 
-        sock.sendMessage(jid, { text: '✰ ¡Pong!\n> Tiempo ⴵ ..ms' }, { quoted: m }).then((s: any) => {
-            if (!s?.key) return;
+        const sent = await sock.sendMessage(chat, { 
+            text: `✰ ¡Pong!\n> Tiempo ⴵ ${speedMs} ms` 
+        }, { quoted: m }).catch(() => null);
 
-            sock.sendMessage(jid, { 
-                text: `✰ ¡Pong!\n> Tiempo ⴵ ${((Date.now() - start) * 0.05).toFixed(2)}ms`, 
-                edit: s.key 
-            }).catch(() => {});
-        }).catch(() => {});
+        queueMicrotask(() => {
+            broadcast('ping_measured', {
+                chat,
+                speedMs,
+                executionMs: Date.now() - start,
+                timestamp: Date.now()
+            });
+        });
+
+        return sent;
     }
 };
