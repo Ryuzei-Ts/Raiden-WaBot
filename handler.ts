@@ -6,7 +6,7 @@ import { broadcast } from '#index';
 import { LRUCache } from 'lru-cache';
 
 const handlerConfig = (config as any)?.handler || {};
-const META_TTL_MS = handlerConfig.metaTtl || 5000;
+const META_TTL_MS = handlerConfig.metaTtl || 300000;
 const MSG_TTL_MS = handlerConfig.msgTtl || 10000;
 const MAX_GROUP_CACHE = handlerConfig.maxGroupCache || 500;
 const MAX_PROCESSED_MSGS = handlerConfig.maxProcessedMsgs || 2000;
@@ -78,19 +78,19 @@ function syncCommandMapIfNeeded(): void {
     }
 }
 
-function getCachedGroupMetadata(chatId: string): any | null {
+async function getGroupMetadata(sock: any, chatId: string): Promise<any> {
     const cached = groupMetaCache.get(chatId);
-    return cached ? cached.metadata : null;
-}
-
-function backgroundFetchGroupMetadata(sock: any, chatId: string): void {
-    sock.groupMetadata(chatId)
-        .then((metadata: any) => {
-            if (metadata) {
-                groupMetaCache.set(chatId, { metadata, ts: Date.now() });
-            }
-        })
-        .catch(() => {});
+    if (cached?.metadata) {
+        return cached.metadata;
+    }
+    try {
+        const freshMeta = await sock.groupMetadata(chatId);
+        if (freshMeta) {
+            groupMetaCache.set(chatId, { metadata: freshMeta, ts: Date.now() });
+            return freshMeta;
+        }
+    } catch {}
+    return null;
 }
 
 function checkRateLimit(sender: string): boolean {
@@ -164,11 +164,7 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         : (normalizedSender.startsWith('52') ? normalizedSender.replace(/^52/, '521') : normalizedSender);
 
     const isGroup = msg.isGroup;
-    let groupMetadata = isGroup ? getCachedGroupMetadata(chat) : null;
-    
-    if (isGroup) {
-        backgroundFetchGroupMetadata(sock, chat);
-    }
+    const groupMetadata = (isGroup && (cmd.admin || cmd.botAdmin)) ? await getGroupMetadata(sock, chat) : null;
 
     const ownerConfig = (config as any)?.owner;
     let isOwner = false;
