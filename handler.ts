@@ -96,7 +96,11 @@ export const handler = async (sock: any, rawMsg: any) => {
         }
         const ctx = { ...msg, sock, m: msg, msg, args, command: commandName, prefix, usedPrefix: prefix, owner: isOwner, admin: isAdmins, botAdmin: isBotAdmins, type: msg.type, body: msg.body, chat: msg.chat, sender: msg.sender, from: msg.from, isGroup: msg.isGroup, quoted: msg.quoted, reply: msg.reply, db: (global as any).db, user: dbData?.users?.[cleanSender] || {}, chatDb: dbData?.chats?.[msg.chat] || {}, edit: (text: string, key: any) => { if (!key) return Promise.resolve(null); return sock.sendMessage(msg.chat, { text, edit: key }); } };
         const executeCommand = cmd.run || cmd.default || (typeof cmd === 'function' ? cmd : null);
-        if (executeCommand) await executeCommand(ctx);
+        if (executeCommand) {
+            setImmediate(() => {
+                executeCommand(ctx).catch(() => {});
+            });
+        }
     } catch (e: any) {
         if (e?.message?.includes('rate-overlimit') || e?.status === 429) return;
         if (!e?.message?.includes('jidDecode')) console.error(chalk.red('Error en handler:'), e);
