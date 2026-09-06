@@ -26,7 +26,7 @@ const extractDownloadUrl = (data: any): string => {
         data?.dl;
 
     if (!candidate || typeof candidate !== 'string' || !candidate.startsWith('http')) {
-        throw new Error(`Respuesta sin URL válida`);
+        throw new Error(`Respuesta sin URL válida: ${JSON.stringify(data).slice(0, 100)}`);
     }
 
     return candidate;
@@ -149,8 +149,11 @@ export default {
                     timeout: 90000
                 });
                 audioBuffer = Buffer.from(audioRes.data);
-            } catch (error) {
+            } catch (error: any) {
                 console.error("Error en descarga:", error);
+                return await sock.sendMessage(chat, {
+                    text: `《✧》 Error al descargar el audio:\n\n❒ *${error.message || error}*\n\n> *Intenta con otro video o más tarde*`
+                }, { quoted: msg });
             }
 
             if (!audioBuffer) {
@@ -166,10 +169,10 @@ export default {
                 ptt: false
             }, { quoted: msg });
 
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
             await sock.sendMessage(chat, {
-                text: "《✧》 Ocurrió un error inesperado."
+                text: `《✧》 Ocurrió un error:\n\n❒ *${error.message || error}*\n\n> *Error al procesar la solicitud*`
             }, { quoted: msg });
         }
     }
