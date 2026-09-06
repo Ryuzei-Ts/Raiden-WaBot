@@ -5,8 +5,8 @@
   "main": "index.ts",
   "author": "Ryuzei-Ts",
   "scripts": {
-    "start": "node --loader ts-node/esm index.ts",
-    "dev": "nodemon --exec node --loader ts-node/esm index.ts"
+    "start": "node --import ts-node/register/transpile-only index.ts",
+    "dev": "nodemon --watch . --ext ts,js,json --exec node --import ts-node/register/transpile-only index.ts"
   },
   "imports": {
     "#config": "./config.ts",
@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
+    "@napi-rs/cli": "^3.0.0",
     "@whiskeysockets/baileys": "*",
     "axios": "^1.7.9",
     "axios-cookiejar-support": "^6.0.5",
@@ -33,7 +34,6 @@
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",
     "qrcode": "^1.5.4",
-    "regenerator-runtime": "^0.14.1",
     "tough-cookie": "^6.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5",
