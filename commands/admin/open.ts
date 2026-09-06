@@ -1,7 +1,7 @@
 export default {
     command: ['abrir', 'open'],
     description: 'Abre el grupo inmediatamente o con temporizador',
-    category: 'grupo',
+    category: 'admin',
     group: true,
     admin: true,
     botAdmin: true,
