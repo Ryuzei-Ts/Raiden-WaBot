@@ -27,6 +27,16 @@ export default {
             return msg.reply('✰ No puedes quitarle el administrador al bot.');
         }
 
+        const metadata = await sock.groupMetadata(chat).catch(() => null);
+        const participants = metadata?.participants || [];
+        const targetParticipant = participants.find((p: any) => 
+            normalizeNumber(p.id) === targetBase || normalizeNumber(p.lid) === targetBase
+        );
+
+        if (targetParticipant?.admin === 'superadmin' || metadata?.owner === target) {
+            return msg.reply('✰ No puedes quitarle el administrador al creador/superadmin del grupo.');
+        }
+
         await sock.groupParticipantsUpdate(chat, [target], 'demote').catch(() => {});
         return sock.sendMessage(chat, { 
             text: `✰ Se le ha quitado el administrador a @${target.split('@')[0]}.`, 
