@@ -34,7 +34,7 @@ export default {
             const query = args.join(' ').trim();
             if (!query) {
                 return sock.sendMessage(chat, { 
-                    text: `   ׄ  ✿  Por favor, ingresa un término de búsqueda.\n\n> *Ejemplo:* ${p}pinterest Twice` 
+                    text: `   ׄ  ✿  Por favor, ingresa un término de búsqueda.` 
                 }, { quoted: m });
             }
 
@@ -80,7 +80,7 @@ export default {
             const likes = selected.likes ?? 0;
             const pinUrl = `https://pinterest.com/pin/${selected.id}`;
 
-            const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Autor* » ${author}\nׅ  ׄ  ✿ *Likes* » ${likes}\nׅ  ׄ  ✿ *Link* » ${pinUrl}\n\nׅ  ׄ  ✿ *¡Enviando imagen, por favor espera!*`.trim();
+            const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Autor* » ${author}\nׅ  ׄ  ✿ *Likes* » ${likes}\nׅ  ׄ  ✿ *Link* » ${pinUrl}\n\nׅ  ׄ  ✿ Made with love By *Ryuzei*`.trim();
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'downloading_image' });
 
