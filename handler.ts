@@ -8,6 +8,9 @@ const META_TTL = 5000;
 const commandMap = new Map<string, any>();
 let lastPluginsRef: any = null;
 
+const processedMsgIds = new Set<string>();
+const MAX_PROCESSED_IDS = 1000;
+
 function syncCommandMap() {
     if (global.plugins === lastPluginsRef) return;
     commandMap.clear();
@@ -50,8 +53,19 @@ const normalizeNumber = (x: string) => String(x || "").split("@")[0].split(":")[
 
 export const handler = async (sock: any, rawMsg: any) => {
     try {
+        const msgId = rawMsg?.key?.id;
+        if (msgId) {
+            if (processedMsgIds.has(msgId)) return;
+            processedMsgIds.add(msgId);
+            if (processedMsgIds.size > MAX_PROCESSED_IDS) {
+                const firstItem = processedMsgIds.values().next().value;
+                if (firstItem) processedMsgIds.delete(firstItem);
+            }
+        }
+
         const msg = serialize(sock, rawMsg);
         if (!msg || !msg.body) return;
+
         const prefix = config.prefix || '.';
         if (!msg.body.startsWith(prefix)) return;
         const args = msg.body.slice(prefix.length).trim().split(/ +/);
@@ -95,14 +109,8 @@ export const handler = async (sock: any, rawMsg: any) => {
             queueMicrotask(() => saveDB(msg.chat, cleanSender));
         }
         const ctx = { ...msg, sock, m: msg, msg, args, command: commandName, prefix, usedPrefix: prefix, owner: isOwner, admin: isAdmins, botAdmin: isBotAdmins, type: msg.type, body: msg.body, chat: msg.chat, sender: msg.sender, from: msg.from, isGroup: msg.isGroup, quoted: msg.quoted, reply: msg.reply, db: (global as any).db, user: dbData?.users?.[cleanSender] || {}, chatDb: dbData?.chats?.[msg.chat] || {}, edit: (text: string, key: any) => { if (!key) return Promise.resolve(null); return sock.sendMessage(msg.chat, { text, edit: key }); } };
-        
         const executeCommand = cmd.run || cmd.default || (typeof cmd === 'function' ? cmd : null);
-        if (executeCommand) {
-            if (executeCommand.constructor.name === 'AsyncFunction') {
-                return executeCommand(ctx);
-            }
-            return Promise.resolve(executeCommand(ctx));
-        }
+        if (executeCommand) return executeCommand(ctx);
     } catch (e: any) {
         if (e?.message?.includes('rate-overlimit') || e?.status === 429) return;
         if (!e?.message?.includes('jidDecode')) console.error(chalk.red('Error en handler:'), e);
