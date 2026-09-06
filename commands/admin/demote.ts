@@ -7,9 +7,17 @@ export default {
     group: true,
     admin: true,
     botAdmin: true,
-    run: async ({ chat, m, sock, msg }: any) => {
-        const target = m.quoted?.sender || (m.mentionedJid && m.mentionedJid[0]);
-        if (!target) return msg.reply('✰ Etiqueta o responde al mensaje del usuario que deseas degradar.');
+    run: async ({ chat, m, sock, msg, args }: any) => {
+        const q = args[0];
+        let target = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || 
+                     m.mentionedJid?.[0] ||
+                     msg.message?.extendedTextMessage?.contextInfo?.participant || 
+                     m.quoted?.sender ||
+                     (q ? q.replace(/[^0-9]/g, '') + '@s.whatsapp.net' : null);
+
+        if (!target || target === '@s.whatsapp.net') {
+            return msg.reply('✰ Etiqueta o responde al mensaje del usuario que deseas degradar.');
+        }
 
         const rawBotJid = sock.user?.id || sock.user?.jid || '';
         const botBase = normalizeNumber(rawBotJid);
@@ -20,6 +28,9 @@ export default {
         }
 
         await sock.groupParticipantsUpdate(chat, [target], 'demote').catch(() => {});
-        return msg.reply(`✰ Se le ha quitado el administrador a @${target.split('@')[0]}.`, { mentions: [target] });
+        return sock.sendMessage(chat, { 
+            text: `✰ Se le ha quitado el administrador a @${target.split('@')[0]}.`, 
+            mentions: [target] 
+        }, { quoted: m });
     }
 };
