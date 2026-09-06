@@ -1,10 +1,8 @@
 import axios from 'axios';
+import yts from 'yt-search';
 import config from '#config';
 
 const LEMPI_KEYS = ['lem488', 'Midnight1', 'Midnight', 'lem691', 'lem678', 'lem957', 'lem293', 'lem144', 'lem459', 'lem501', 'lem141'];
-const STELLAR_KEY = 'Midnight';
-
-const getRandomLempiKey = (): string => LEMPI_KEYS[Math.floor(Math.random() * LEMPI_KEYS.length)];
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -53,46 +51,26 @@ const fetchWithTimeout = async (url: string, timeoutMs = 45000): Promise<any> =>
     }
 };
 
-const fetchEndpoint = async (url: string, retries = 1): Promise<string> => {
-    for (let attempt = 0; attempt <= retries; attempt++) {
-        try {
-            const data = await fetchWithTimeout(url, 35000);
-            const downloadUrl = extractDownloadUrl(data);
-            return downloadUrl;
-        } catch (err) {
-            if (attempt === retries) throw err;
-            await sleep(1000);
-        }
-    }
-    throw new Error('Timeout agotado tras reintentos.');
-};
-
-const getDownloadStreamSequential = async (link: string): Promise<string> => {
-    const encoded = encodeURIComponent(link);
-    const key = getRandomLempiKey();
-
-    const apis = [
-        { name: 'Lempi YTA', url: `https://api.lempi.lat/dl/yta?url=${encoded}&apikey=${key}` },
-        { name: 'Lempi YTV', url: `https://api.lempi.lat/dl/ytv?url=${encoded}&apikey=${key}` },
-        { name: 'Stellar', url: `https://api.stellarwa.xyz/dl/ytmp3?url=${encoded}&key=${STELLAR_KEY}` }
-    ];
-
+const getLempiDownload = async (videoUrl: string): Promise<string> => {
+    const encoded = encodeURIComponent(videoUrl);
     let lastError = '';
 
-    for (const api of apis) {
+    for (const key of LEMPI_KEYS) {
         try {
-            console.log(`Intentando con ${api.name}...`);
-            const result = await fetchEndpoint(api.url);
-            console.log(`✅ ${api.name} funcionó`);
-            return result;
+            const url = `https://api.lempi.lat/dl/yta?url=${encoded}&apikey=${key}`;
+            console.log(`Intentando con key: ${key}...`);
+            const data = await fetchWithTimeout(url, 35000);
+            const downloadUrl = extractDownloadUrl(data);
+            console.log(`✅ Key ${key} funcionó`);
+            return downloadUrl;
         } catch (err: any) {
-            console.log(`❌ ${api.name} falló: ${err.message}`);
+            console.log(`❌ Key ${key} falló: ${err.message}`);
             lastError = err.message;
             await sleep(500);
         }
     }
 
-    throw new Error(`Todas las APIs fallaron. Último error: ${lastError}`);
+    throw new Error(`Todas las keys de Lempi fallaron. Último error: ${lastError}`);
 };
 
 export default {
@@ -119,21 +97,20 @@ export default {
                 searchQuery = `https://youtu.be/${urlMatch[1]}`;
             }
 
-            const searchResult = await axios.get(`https://api.stellarwa.xyz/api/youtube?query=${encodeURIComponent(searchQuery)}&key=${STELLAR_KEY}`);
-            
-            if (!searchResult.data?.status || !searchResult.data?.data?.length) {
+            const searchResult = await yts(searchQuery);
+            if (!searchResult || !searchResult.videos || !searchResult.videos.length) {
                 return await sock.sendMessage(chat, {
                     text: "《✧》 No se encontró información del video."
                 }, { quoted: msg });
             }
 
-            const video = searchResult.data.data[0];
+            const video = searchResult.videos[0];
             const videoUrl = video.url;
             const title = (video.title || "").trim();
-            const thumb = video.thumbnail || video.image;
-            const channel = video.channel || video.author || "Desconocido";
+            const thumb = video.thumbnail || video.image || `https://i.ytimg.com/vi/${video.videoId}/mqdefault.jpg`;
+            const channel = video.author?.name || video.author || "Desconocido";
             const views = video.views || 0;
-            const duration = video.duration || video.timestamp || "";
+            const duration = video.timestamp || video.duration || "";
 
             const thumbBuffer = await axios.get(thumb, { responseType: 'arraybuffer' }).then(res => Buffer.from(res.data));
 
@@ -151,7 +128,7 @@ export default {
             let audioBuffer: Buffer | null = null;
 
             try {
-                const downloadUrl = await getDownloadStreamSequential(videoUrl);
+                const downloadUrl = await getLempiDownload(videoUrl);
                 const audioRes = await axios.get(downloadUrl, { 
                     responseType: 'arraybuffer',
                     timeout: 90000
