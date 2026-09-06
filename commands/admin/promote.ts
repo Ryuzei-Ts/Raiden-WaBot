@@ -5,7 +5,7 @@ const normalizeNumber = (x: string) => String(x || "").split("@")[0].split(":")[
 export default {
     command: ['promote', 'daradmin', 'promover'],
     description: 'Promueve a un usuario a administrador',
-    category: 'grupo',
+    category: 'admin',
     group: true,
     admin: true,
     botAdmin: true,
