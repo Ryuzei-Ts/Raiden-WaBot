@@ -12,11 +12,11 @@ export default {
             const text = args.join(' ').trim();
             if (!text) {
                 return sock.sendMessage(chat, { 
-                    text: `Ingresa una pregunta. Ejemplo: ${p}ia quien eres?` 
+                    text: `   ׄ  ✿  Por favor, ingresa una pregunta o mensaje para continuar.` 
                 }, { quoted: m });
             }
 
-            const systemPrompt = `Eres ${config.botName}, fuiste creado por ${config.devName}. Responde de forma muy corta, directa y sin usar ningún emoji.`;
+            const systemPrompt = `Eres ${config.botName}, la Raiden Shogun e Inazuma de Genshin Impact, un bot creado por ${config.devName}. Eres elegante, serena y amable. Responde de forma corta, directa y sin usar ningún emoji.`;
 
             const endpoint = `https://api.delirius.online/ia/gptprompt?text=${encodeURIComponent(text)}&prompt=${encodeURIComponent(systemPrompt)}`;
 
@@ -46,7 +46,7 @@ export default {
 
         } catch (error: any) {
             return sock.sendMessage(chat, { 
-                text: 'Ocurrio un error al procesar tu solicitud.' 
+                text: '   ׄ  ✿  Ocurrió un error al procesar tu solicitud.' 
             }, { quoted: m });
         }
     }
