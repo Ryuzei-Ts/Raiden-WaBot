@@ -164,7 +164,9 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         : (normalizedSender.startsWith('52') ? normalizedSender.replace(/^52/, '521') : normalizedSender);
 
     const isGroup = msg.isGroup;
-    const groupMetadata = (isGroup && (cmd.admin || cmd.botAdmin)) ? await getGroupMetadata(sock, chat) : null;
+    
+    // ✅ CAMBIO AQUÍ: Siempre traemos la metadata en grupos (usa la caché de LRU para no saturar)
+    const groupMetadata = isGroup ? await getGroupMetadata(sock, chat) : null;
 
     const ownerConfig = (config as any)?.owner;
     let isOwner = false;
