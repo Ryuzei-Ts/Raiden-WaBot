@@ -14,17 +14,19 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import readline from 'readline';
 import qrcode from 'qrcode';
 
-import { serialize } from '#simple';
-import { loadDB } from '#db';
-import config from '#config';
-import { handler } from '#handler';
-import printMessageLog from './lib/printlog.ts';
+process.removeAllListeners('warning');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 (global as any).botName = config?.botName || 'Raiden-WaBot';
 (global as any).plugins = (global as any).plugins || {};
+
+import { serialize } from '#simple';
+import { loadDB } from '#db';
+import config from '#config';
+import { handler } from '#handler';
+import printMessageLog from './lib/printlog.ts';
 
 const sDir = path.join(__dirname, 'Session');
 
@@ -279,11 +281,8 @@ async function startBot() {
 
 startBot().catch(() => {});
 
-const originalStdoutWrite = process.stdout.write.bind(process.stdout);
-const originalStderrWrite = process.stderr.write.bind(process.stderr);
-
-const filterNoise = (chunk: any, encoding?: any, callback?: any) => {
-    const str = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+const filterNoise = (chunk: any, encoding?: any, callback?: any): boolean => {
+    const str = typeof chunk === 'string' ? chunk : chunk?.toString?.('utf8') || '';
     
     if (
         str.includes('Closing open session') ||
@@ -299,17 +298,28 @@ const filterNoise = (chunk: any, encoding?: any, callback?: any) => {
         str.includes('Failed to decrypt') ||
         str.includes('Session error') ||
         str.includes('Session error:') ||
-        str.includes('Error: bad-mac')
+        str.includes('Error: bad-mac') ||
+        str.includes('DEP0040')
     ) {
         if (typeof callback === 'function') callback();
         return true;
     }
     
-    return originalStdoutWrite(chunk, encoding, callback);
+    return false;
 };
 
-process.stdout.write = filterNoise as any;
-process.stderr.write = filterNoise as any;
+const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+const originalStderrWrite = process.stderr.write.bind(process.stderr);
+
+process.stdout.write = function (chunk: any, encoding?: any, callback?: any) {
+    if (filterNoise(chunk, encoding, callback)) return true;
+    return originalStdoutWrite(chunk, encoding, callback);
+} as any;
+
+process.stderr.write = function (chunk: any, encoding?: any, callback?: any) {
+    if (filterNoise(chunk, encoding, callback)) return true;
+    return originalStderrWrite(chunk, encoding, callback);
+} as any;
 
 process.on('uncaughtException', () => {});
 process.on('unhandledRejection', () => {});
