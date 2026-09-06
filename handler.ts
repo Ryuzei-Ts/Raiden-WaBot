@@ -5,12 +5,14 @@ import chalk from 'chalk';
 import { broadcast } from '#index';
 import { LRUCache } from 'lru-cache';
 
-const META_TTL_MS = config?.handler?.metaTtl || 5000;
-const MSG_TTL_MS = config?.handler?.msgTtl || 10000;
-const MAX_GROUP_CACHE = config?.handler?.maxGroupCache || 500;
-const MAX_PROCESSED_MSGS = config?.handler?.maxProcessedMsgs || 2000;
-const RATE_LIMIT_WINDOW_MS = config?.handler?.rateLimitWindow || 3000;
-const MAX_COMMANDS_PER_WINDOW = config?.handler?.maxCommandsPerWindow || 5;
+const handlerConfig = (config as any)?.handler || {};
+const META_TTL_MS = handlerConfig.metaTtl || 5000;
+const MSG_TTL_MS = handlerConfig.msgTtl || 10000;
+const MAX_GROUP_CACHE = handlerConfig.maxGroupCache || 500;
+const MAX_PROCESSED_MSGS = handlerConfig.maxProcessedMsgs || 2000;
+const RATE_LIMIT_WINDOW_MS = handlerConfig.rateLimitWindow || 3000;
+const MAX_COMMANDS_PER_WINDOW = handlerConfig.maxCommandsPerWindow || 5;
+
 const groupMetaCache = new LRUCache<string, { metadata: any; ts: number }>({
     max: MAX_GROUP_CACHE,
     ttl: META_TTL_MS,
@@ -18,6 +20,7 @@ const groupMetaCache = new LRUCache<string, { metadata: any; ts: number }>({
 
 const processedMsgIds = new Set<string>();
 const userRateLimits = new Map<string, { count: number; resetTime: number }>();
+
 export function invalidateGroupCache(chatId: string): void {
     if (chatId) groupMetaCache.delete(chatId);
 }
@@ -46,6 +49,7 @@ const getAlternativeSenderVariants = (normalizedNumberStr: string): string[] => 
 
 const commandMap = new Map<string, any>();
 let lastPluginsRef: any = null;
+
 function syncCommandMap(): void {
     if ((global as any).plugins === lastPluginsRef) return;
     lastPluginsRef = (global as any).plugins;
@@ -99,7 +103,8 @@ function getAdminSet(participants: any[]): Set<string> {
 }
 
 function checkIsOwner(normalizedSender: string): boolean {
-    const ownerConfig = config.owner;
+    const ownerConfig = (config as any)?.owner;
+    if (!ownerConfig) return false;
     const variants = getAlternativeSenderVariants(normalizedSender);
     if (ownerConfig instanceof Set) {
         return variants.some(v => ownerConfig.has(v));
@@ -157,7 +162,7 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         if (!msg || !msg.body) return;
         const chat = msg.chat || msg.from || rawMsg?.key?.remoteJid;
         if (!chat) return;
-        const prefix = config.prefix || '.';
+        const prefix = (config as any)?.prefix || '.';
         if (!msg.body.startsWith(prefix)) return;
         const spaceIndex = msg.body.indexOf(' ');
         const commandName = (spaceIndex === -1 ? msg.body.slice(prefix.length) : msg.body.slice(prefix.length, spaceIndex)).toLowerCase();
