@@ -44,10 +44,6 @@ export default {
             return msg.reply('✰ No puedes quitarle el administrador al bot.');
         }
 
-        if (isOwnerNumber(targetBase)) {
-            return msg.reply('✰ No puedes quitarle el administrador a un Owner del bot.');
-        }
-
         const metadata = await sock.groupMetadata(chat).catch(() => null);
         const participants = metadata?.participants || [];
         
@@ -59,6 +55,19 @@ export default {
                    (pId && (pId.endsWith(targetBase) || targetBase.endsWith(pId)));
         });
 
+        if (targetParticipant) {
+            const pId = normalizeNumber(targetParticipant.id);
+            const pPhone = normalizeNumber(targetParticipant.phoneNumber);
+            if (pId === botBase || pPhone === botBase) {
+                return msg.reply('✰ No puedes quitarle el administrador al bot.');
+            }
+        }
+
+        const resolvedBase = targetParticipant ? normalizeNumber(targetParticipant.id) : targetBase;
+        if (isOwnerNumber(targetBase) || isOwnerNumber(resolvedBase)) {
+            return msg.reply('✰ No puedes quitarle el administrador a un Owner del bot.');
+        }
+
         const isAdmin = targetParticipant?.admin === 'admin' || targetParticipant?.admin === 'superadmin';
 
         if (!isAdmin) {
@@ -68,7 +77,7 @@ export default {
             }, { quoted: m });
         }
 
-        if (targetParticipant?.admin === 'superadmin' || metadata?.owner === target) {
+        if (targetParticipant?.admin === 'superadmin' || metadata?.owner === target || metadata?.owner === targetParticipant?.id) {
             return msg.reply('✰ No puedes quitarle el administrador al creador/superadmin del grupo.');
         }
 
