@@ -5,7 +5,7 @@ import chalk from 'chalk';
 import { broadcast } from '#index';
 
 const groupMetaCache = new Map<string, { metadata: any; ts: number }>();
-const metaTtl = 5000;
+const metaTtl = 3600000;
 
 const commandMap = new Map<string, any>();
 let lastPluginsRef: any = null;
@@ -13,6 +13,10 @@ let lastPluginsCount = 0;
 
 const processedMsgIds = new Map<string, number>();
 const msgTtl = 10000;
+
+export function invalidateGroupCache(chatId: string) {
+    if (chatId) groupMetaCache.delete(chatId);
+}
 
 function syncCommandMap() {
     const currentPlugins = global.plugins;
