@@ -15,10 +15,8 @@ export default {
             `BEGIN:VCARD\n` +
             `VERSION:3.0\n` +
             `FN:${ownerName}\n` +
-            `ORG:Raiden-WaBot\n` +
+            `ORG:${config.botName}\n` +
             `TEL;type=CELL;type=VOICE;waid=${ownerNumber}:${ownerNumber}\n` +
-            `URL:https://github.com/Ryuzei-Ts/Raiden-WaBot\n` +
-            `ADR;type=HOME:;;México;;;\n` +
             `END:VCARD`;
 
         await sock.sendMessage(chat, {
