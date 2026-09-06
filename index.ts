@@ -99,7 +99,7 @@ async function startBot() {
         logger: P({ level: 'silent' }) as any,
         printQRInTerminal: opcion === '1',
         version,
-        browser: Browsers.ubuntu('Chrome'),
+        browser: Browsers.macOS('Safari'),
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'silent' }) as any)
@@ -143,7 +143,7 @@ async function startBot() {
             } catch (err) {
                 console.log(chalk.white('[ ERROR ] solicitud de codigo:'), err);
             }
-        }, 1500);
+        }, 3000);
     }
 
     sock.ev.on('creds.update', saveCreds);
