@@ -9,6 +9,9 @@ const downloadCache = new LRUCache<string, { url: string; isVideo: boolean }>({ 
 const LEMPI_KEYS = ['lem488', 'Midnight1', 'Midnight', 'lem691', 'lem678', 'lem957', 'lem293', 'lem144', 'lem459', 'lem501', 'lem141'];
 const STELLAR_KEY = 'Midnight';
 
+const MAX_DURATION_SECONDS = 7 * 60;
+const MAX_FILE_SIZE_BYTES = 30 * 1024 * 1024;
+
 const formatViews = (v: number) => 
     v >= 1e9 ? (v / 1e9).toFixed(1) + 'B' : 
     v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : 
@@ -116,7 +119,7 @@ const getDownloadStreamSequential = async (link: string, msgId?: string): Promis
 
 export default {
     command: ['play', 'playaudio', 'audio'],
-    description: 'Descarga y envía audio de YouTube',
+    description: 'Descarga y envía audio de YouTube (Máx. 7 min / 30 MB)',
     category: 'download',
     group: true,
     run: async (ctx: any) => {
@@ -163,6 +166,12 @@ export default {
                 }
             }
 
+            if (video.seconds && video.seconds > MAX_DURATION_SECONDS) {
+                return sock.sendMessage(chat, { 
+                    text: `   ׄ  ✿ El audio dura *${video.timestamp}*, superando el límite máximo permitido de *7 minutos*.` 
+                }, { quoted: msg });
+            }
+
             const videoUrl = video.link || video.url;
             const title = (video.title || "").trim();
             const thumb = video.thumb || video.thumbnail || video.image;
@@ -201,6 +210,13 @@ export default {
             } else {
                 emitProgress(msgId, 'downloading_audio_stream');
                 audioBuffer = await getBuffer(streamData.url);
+            }
+
+            if (audioBuffer.length > MAX_FILE_SIZE_BYTES) {
+                const sizeMb = (audioBuffer.length / (1024 * 1024)).toFixed(1);
+                return sock.sendMessage(chat, { 
+                    text: `   ׄ  ✿ El audio pesa *${sizeMb} MB*, superando el peso máximo permitido de *30 MB*.` 
+                }, { quoted: msg });
             }
 
             emitProgress(msgId, 'sending_audio_to_whatsapp');
