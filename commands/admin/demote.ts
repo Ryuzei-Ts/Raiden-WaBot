@@ -1,16 +1,17 @@
 import config from '#config';
 
-const getDigits = (x: string) => String(x || "").replace(/[^\d]/g, "").trim();
+const normalizeNumber = (x: string) => String(x || "").split("@")[0].split(":")[0].replace(/[^\d]/g, "").trim();
 
-function isOwnerNumber(targetDigits: string): boolean {
-    if (!targetDigits) return false;
+function isOwnerNumber(targetBase: string): boolean {
+    if (!targetBase) return false;
     const ownerSet = config.owner;
     if (!(ownerSet instanceof Set)) return false;
 
+    if (ownerSet.has(targetBase)) return true;
+
     for (const ownerNum of ownerSet) {
-        const cleanOwner = getDigits(ownerNum);
-        if (!cleanOwner) continue;
-        if (targetDigits === cleanOwner || targetDigits.endsWith(cleanOwner) || cleanOwner.endsWith(targetDigits)) {
+        const cleanOwner = normalizeNumber(ownerNum);
+        if (cleanOwner && (cleanOwner === targetBase || cleanOwner.endsWith(targetBase) || targetBase.endsWith(cleanOwner))) {
             return true;
         }
     }
@@ -26,24 +27,24 @@ export default {
     botAdmin: true,
     run: async ({ chat, m, sock, msg, args }: any) => {
         const q = args?.[0];
-        let target = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || 
-                     m.mentionedJid?.[0] || 
-                     m.quoted?.sender || 
-                     (q ? q.replace(/[^0-9]/g, '') + '@s.whatsapp.net' : null);
+        const target = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0] || 
+                       m.mentionedJid?.[0] || 
+                       m.quoted?.sender || 
+                       (q ? q.replace(/[^0-9]/g, '') + '@s.whatsapp.net' : null);
 
         if (!target || target === '@s.whatsapp.net') {
             return msg.reply('✰ Etiqueta o responde al mensaje del usuario que deseas degradar.');
         }
 
         const rawBotJid = sock.user?.id || sock.user?.jid || '';
-        const botDigits = getDigits(rawBotJid);
-        const targetDigits = getDigits(target);
+        const botBase = normalizeNumber(rawBotJid);
+        const targetBase = normalizeNumber(target);
 
-        if (targetDigits && botDigits && (targetDigits === botDigits || botDigits.endsWith(targetDigits) || targetDigits.endsWith(botDigits))) {
+        if (targetBase === botBase) {
             return msg.reply('✰ No puedes quitarle el administrador al bot.');
         }
 
-        if (isOwnerNumber(targetDigits)) {
+        if (isOwnerNumber(targetBase)) {
             return msg.reply('✰ No puedes quitarle el administrador a un Owner del bot.');
         }
 
@@ -51,18 +52,18 @@ export default {
         const participants = metadata?.participants || [];
         
         const targetParticipant = participants.find((p: any) => {
-            const pId = getDigits(p.id);
-            const pLid = getDigits(p.lid);
-            const pPhone = getDigits(p.phoneNumber);
-            return pId === targetDigits || pLid === targetDigits || pPhone === targetDigits ||
-                   (pId && targetDigits.endsWith(pId)) || (targetDigits && pId.endsWith(targetDigits));
+            const pId = normalizeNumber(p.id);
+            const pLid = normalizeNumber(p.lid);
+            const pPhone = normalizeNumber(p.phoneNumber);
+            return pId === targetBase || pLid === targetBase || pPhone === targetBase ||
+                   (pId && (pId.endsWith(targetBase) || targetBase.endsWith(pId)));
         });
 
         const isAdmin = targetParticipant?.admin === 'admin' || targetParticipant?.admin === 'superadmin';
 
         if (!isAdmin) {
             return sock.sendMessage(chat, { 
-                text: `✰ El usuario @${targetDigits} no está en la lista de administradores.`, 
+                text: `✰ El usuario @${targetBase} no está en la lista de administradores.`, 
                 mentions: [target] 
             }, { quoted: m });
         }
@@ -73,7 +74,7 @@ export default {
 
         await sock.groupParticipantsUpdate(chat, [target], 'demote').catch(() => {});
         return sock.sendMessage(chat, { 
-            text: `✰ Se le ha quitado el administrador a @${targetDigits}.`, 
+            text: `✰ Se le ha quitado el administrador a @${targetBase}.`, 
             mentions: [target] 
         }, { quoted: m });
     }
