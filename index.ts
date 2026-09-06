@@ -17,7 +17,7 @@ import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { LRUCache } from 'lru-cache';
 import debounce from 'lodash.debounce';
-import Agent from 'https';
+import Agent from 'node:https';
 
 import { serialize } from '#simple';
 import { loadDB } from '#db';
@@ -28,15 +28,23 @@ import printMessageLog from './lib/printlog.ts';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-(global as any).botName = config?.botName || 'Raiden-WaBot';
-(global as any).plugins = (global as any).plugins || {};
+declare global {
+    var botName: string;
+    var plugins: Record<string, any>;
+    var server: any;
+    var expressServer: any;
+    var broadcast: (event: string, payload: any) => void;
+}
 
-const httpServer = (global as any).server || (global as any).expressServer || createServer();
+globalThis.botName = config?.botName || 'Raiden-WaBot';
+globalThis.plugins = globalThis.plugins || {};
+
+const httpServer = globalThis.server || globalThis.expressServer || createServer();
 if (!httpServer.listening) {
     const PORT = process.env.PORT || process.env.WS_PORT || 8080;
     httpServer.listen(PORT);
 }
-(global as any).server = httpServer;
+globalThis.server = httpServer;
 
 const wss = new WebSocketServer({ server: httpServer });
 const clients = new Set<WebSocket>();
@@ -59,7 +67,7 @@ export function broadcast(event: string, payload: any) {
     }
 }
 
-(global as any).broadcast = broadcast;
+globalThis.broadcast = broadcast;
 
 const sDir = path.join(__dirname, 'Session');
 
@@ -70,8 +78,9 @@ const mStore = new LRUCache<string, any>({
 
 const httpAgent = new Agent.Agent({
     keepAlive: true,
-    maxSockets: 50,
-    keepAliveMsecs: 10000
+    maxSockets: 100,
+    keepAliveMsecs: 15000,
+    scheduling: 'fifo'
 });
 
 const methodCodeQR = process.argv.includes("--qr");
@@ -130,7 +139,7 @@ async function cargarPlugins(dir = './commands') {
             })
         );
 
-        (global as any).plugins = newPlugins;
+        globalThis.plugins = newPlugins;
         console.log(chalk.bold.cyan(`[ SYSTEM ] ${Object.keys(newPlugins).length} plugins cargados en memoria.`));
         broadcast('plugins_loaded', { count: Object.keys(newPlugins).length });
     } catch (e) {
@@ -270,8 +279,8 @@ async function startBot() {
 
         if (connection === 'open') {
             (global as any).mainConn = sock;
-            console.log(chalk.bold.cyan(`\n✿ ${(global as any).botName} conectado y listo ✰\n`));
-            broadcast('bot_status', { status: 'connected', botName: (global as any).botName });
+            console.log(chalk.bold.cyan(`\n✿ ${globalThis.botName} conectado y listo ✰\n`));
+            broadcast('bot_status', { status: 'connected', botName: globalThis.botName });
         }
 
         if (connection === 'close') {
@@ -293,23 +302,24 @@ async function startBot() {
         }
     });
 
-    sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    sock.ev.on('messages.upsert', ({ messages, type }) => {
         if (type !== 'notify') return;
 
-        for (let i = 0; i < messages.length; i++) {
+        const len = messages.length;
+        for (let i = 0; i < len; i++) {
             const rawMsg = messages[i];
-            if (!rawMsg?.message || !rawMsg?.key?.id) continue;
-            
+            const mId = rawMsg?.key?.id;
+            if (!mId || !rawMsg.message) continue;
+
             const jid = rawMsg.key.remoteJid || '';
             if (jid === 'status@broadcast' || jid.endsWith('@broadcast')) continue;
 
-            const mId = rawMsg.key.id;
-            
             if (mStore.has(mId)) continue;
-            mStore.set(mId, rawMsg);
+            mStore.set(mId, true);
 
+            handler(sock, rawMsg).catch(() => {});
+            
             queueMicrotask(() => {
-                handler(sock, rawMsg).catch(() => {});
                 printMessageLog(serialize(sock, rawMsg), sock).catch(() => {});
                 broadcast('message_received', { id: mId, jid, pushName: rawMsg.pushName });
             });
