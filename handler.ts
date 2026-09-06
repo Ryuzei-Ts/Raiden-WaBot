@@ -13,14 +13,27 @@ const MAX_PROCESSED_IDS = 1000;
 
 function syncCommandMap() {
     if (global.plugins === lastPluginsRef) return;
-    commandMap.clear();
     lastPluginsRef = global.plugins;
-    if (global.plugins && typeof global.plugins === 'object') {
-        for (const name in global.plugins) {
-            const plugin = (global.plugins as any)[name];
+    commandMap.clear();
+    
+    if (lastPluginsRef && typeof lastPluginsRef === 'object') {
+        const keys = Object.keys(lastPluginsRef);
+        for (let i = 0; i < keys.length; i++) {
+            const plugin = lastPluginsRef[keys[i]];
             if (!plugin?.command) continue;
-            const aliases = Array.isArray(plugin.command) ? plugin.command : [plugin.command];
-            for (const alias of aliases) commandMap.set(alias.toLowerCase(), plugin);
+
+            if (plugin.run || plugin.default) {
+                plugin._exec = plugin.run || plugin.default;
+            } else if (typeof plugin === 'function') {
+                plugin._exec = plugin;
+            }
+
+            const cmd = plugin.command;
+            if (Array.isArray(cmd)) {
+                for (let j = 0; j < cmd.length; j++) commandMap.set(String(cmd[j]).toLowerCase(), plugin);
+            } else {
+                commandMap.set(String(cmd).toLowerCase(), plugin);
+            }
         }
     }
 }
@@ -66,6 +79,9 @@ export const handler = async (sock: any, rawMsg: any) => {
         const msg = serialize(sock, rawMsg);
         if (!msg || !msg.body) return;
 
+        const chat = msg.chat || msg.from || rawMsg?.key?.remoteJid;
+        if (!chat) return;
+
         const prefix = config.prefix || '.';
         if (!msg.body.startsWith(prefix)) return;
         const args = msg.body.slice(prefix.length).trim().split(/ +/);
@@ -75,15 +91,9 @@ export const handler = async (sock: any, rawMsg: any) => {
         const cmd = commandMap.get(commandName);
         if (!cmd) return;
         queueMicrotask(() => { registerData(sock, msg).catch(() => {}); });
-        if (global.plugins && typeof global.plugins === 'object') {
-            for (const name in global.plugins) {
-                const plugin = (global.plugins as any)[name];
-                if (plugin?.before && typeof plugin.before === "function") plugin.before.call(sock, msg, { sock }).catch(() => {});
-            }
-        }
         let realJid = msg.sender;
-        try { realJid = UserJid(sock, msg.chat, msg.sender) || msg.sender; } catch { realJid = msg.sender; }
-        const groupMetadata = msg.isGroup ? await getGroupMetadata(sock, msg.chat) : null;
+        try { realJid = UserJid(sock, chat, msg.sender) || msg.sender; } catch { realJid = msg.sender; }
+        const groupMetadata = msg.isGroup ? await getGroupMetadata(sock, chat) : null;
         const normalizedSender = normalizeNumber(realJid);
         const altSender = normalizedSender.startsWith('521') ? normalizedSender.replace(/^521/, '52') : (normalizedSender.startsWith('52') ? normalizedSender.replace(/^52/, '521') : normalizedSender);
         
@@ -113,12 +123,12 @@ export const handler = async (sock: any, rawMsg: any) => {
         if (dbData) {
             const userDb = dbData.users?.[cleanSender];
             if (userDb) { userDb.usedcommands = (userDb.usedcommands || 0) + 1; userDb.exp = (userDb.exp || 0) + Math.floor(Math.random() * 10) + 5; }
-            if (msg.isGroup && dbData.chats?.[msg.chat]?.users?.[cleanSender]) { dbData.chats[msg.chat].users[cleanSender].lastCmd = Date.now(); }
-            queueMicrotask(() => saveDB(msg.chat, cleanSender));
+            if (msg.isGroup && dbData.chats?.[chat]?.users?.[cleanSender]) { dbData.chats[chat].users[cleanSender].lastCmd = Date.now(); }
+            queueMicrotask(() => saveDB(chat, cleanSender));
         }
-        const ctx = { ...msg, sock, m: msg, msg, args, command: commandName, prefix, usedPrefix: prefix, owner: isOwner, admin: isAdmins, botAdmin: isBotAdmins, type: msg.type, body: msg.body, chat: msg.chat, sender: msg.sender, from: msg.from, isGroup: msg.isGroup, quoted: msg.quoted, reply: msg.reply, db: (global as any).db, user: dbData?.users?.[cleanSender] || {}, chatDb: dbData?.chats?.[msg.chat] || {}, edit: (text: string, key: any) => { if (!key) return Promise.resolve(null); return sock.sendMessage(msg.chat, { text, edit: key }); } };
-        const executeCommand = cmd.run || cmd.default || (typeof cmd === 'function' ? cmd : null);
-        if (executeCommand) return executeCommand(ctx);
+        const ctx = { ...msg, sock, m: msg, msg, args, command: commandName, prefix, usedPrefix: prefix, owner: isOwner, admin: isAdmins, botAdmin: isBotAdmins, type: msg.type, body: msg.body, chat, sender: msg.sender, from: msg.from, isGroup: msg.isGroup, quoted: msg.quoted, reply: msg.reply, db: (global as any).db, user: dbData?.users?.[cleanSender] || {}, chatDb: dbData?.chats?.[chat] || {}, edit: (text: string, key: any) => { if (!key) return Promise.resolve(null); return sock.sendMessage(chat, { text, edit: key }); } };
+        
+        if (cmd._exec) return cmd._exec(ctx);
     } catch (e: any) {
         if (e?.message?.includes('rate-overlimit') || e?.status === 429) return;
         if (!e?.message?.includes('jidDecode')) console.error(chalk.red('Error en handler:'), e);
