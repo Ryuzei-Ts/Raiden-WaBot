@@ -94,7 +94,7 @@ const getVideoDownloadUrl = async (link: string, msgId?: string): Promise<string
 
 export default {
     command: ['play2', 'ytmp4', 'video', 'playv'],
-    description: 'Descarga y envía video de YouTube (Máx. 7 min / 30 MB)',
+    description: 'Descarga y envía video de YouTube.',
     category: 'download',
     group: true,
     run: async (ctx: any) => {
