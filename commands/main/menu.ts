@@ -2,7 +2,7 @@ import { prepareWAMessageMedia } from '@whiskeysockets/baileys';
 import config from '#config';
 
 export default {
-    command: ['allmenu', 'menu', 'help', 'comandos'],
+    command: ['menu', 'help', 'comandos'],
     description: 'Muestra el menú completo del bot',
     category: 'main',
     group: true,
@@ -15,7 +15,7 @@ export default {
             const userName = msg.pushName || 'Usuario';
             const link = 'https://ryuzei.xyz';
 
-            let menu = `︶⊹︶︶୨୧︶︶⊹︶︶⊹︶︶୨୧︶︶⊹\n「 ꕤ 」 ¡Hola! *${userName}*, Soy *${config.botName}*, Aquí tienes la lista de comandos.\n> Para Ver Tu Perfil Usa *${p}perfil* 𝜗ৎ\n\n‿    ׅ   𝆬     ε❤︎︭з   𝆬     ׅ      ‿\n\nׅ  ׄ  ✿ *Bot* » ${config.botName}\nׅ  ׄ  ✿ *Desarrollador* » ${config.devName}\nׅ  ׄ  ✿ *Moneda* » ${config.coin || '¥enes'}\nׅ  ׄ  ✿ *Prefijo* » ${p}\nׅ  ׄ  ✿ *Link* » ${link}\n\n‿    ׅ   𝆬     ε❤︎︭з   𝆬     ׅ      ‿\n${String.fromCharCode(8206).repeat(4000)}\n\n⋆｡ﾟ☁︎ ｡° *ᴄᴏᴍ꯭ᴀ꯭ɴᴅᴏs* ﾟ｡˚₊ 𓂃\n`;
+            let menu = `︶⊹︶︶୨୧︶︶⊹︶︶⊹︶︶୨୧︶︶⊹\n「 ꕤ 」 ¡Hola! *${userName}*, Soy *${config.botName}*, Aquí tienes la lista de comandos.\n> Para Ver Tu Perfil Usa *${p}perfil* 𝜗ৎ\n\n‿    ׅ   𝆬     ε❤︎︭з   𝆬     ׅ      ‿\n\nׅ  ׄ  ✿ *Modo* » Raiden-Vip\nׅ  ׄ  ✿ *Desarrollador* » ${config.devName}\nׅ  ׄ  ✿ *Moneda* » ${config.coin || '¥enes'}\nׅ  ׄ  ✿ *Prefijo* » ${p}\nׅ  ׄ  ✿ *Link* » ${link}\n\n‿    ׅ   𝆬     ε❤︎︭з   𝆬     ׅ      ‿\n${String.fromCharCode(8206).repeat(4000)}\n\n⋆｡ﾟ☁︎ ｡° *ᴄᴏᴍ꯭ᴀ꯭ɴᴅᴏs* ﾟ｡˚₊ 𓂃\n`;
 
             const categoryArg = args[0]?.toLowerCase();
 
@@ -26,14 +26,31 @@ export default {
                 const plugin = plugins[name];
                 if (!plugin?.command) continue;
                 const cat = (plugin.category || 'otros').toLowerCase();
+                if (cat === 'owner') continue;
                 if (!categories[cat]) categories[cat] = [];
+                const aliases = Array.isArray(plugin.command) ? plugin.command : [plugin.command];
+                const uniqueAliases = [...new Set(aliases)];
+                const limitedAliases = uniqueAliases.slice(0, 2);
                 categories[cat].push({
-                    command: plugin.command,
+                    command: limitedAliases,
                     description: plugin.description || 'Sin descripción',
                     category: plugin.category || 'otros',
                     usage: plugin.usage || '',
-                    alias: Array.isArray(plugin.command) ? plugin.command : [plugin.command]
+                    allAliases: uniqueAliases
                 });
+            }
+
+            for (const cat in categories) {
+                const uniqueCommands: any[] = [];
+                const seen = new Set();
+                for (const cmd of categories[cat]) {
+                    const key = cmd.allAliases.join('|');
+                    if (!seen.has(key)) {
+                        seen.add(key);
+                        uniqueCommands.push(cmd);
+                    }
+                }
+                categories[cat] = uniqueCommands;
             }
 
             if (categoryArg && !categories[categoryArg]) {
@@ -64,7 +81,7 @@ export default {
                 const catEmoji = categoryEmojis[category] || '✦';
                 menu += `\n☕︎  𝀢  塞缪尔ᅟ֪   ﹙ *\`${catName}\`* ﹚ᅟ ㅤ✿\n\n`;
                 cmds.forEach((cmd) => {
-                    const aliases = Array.isArray(cmd.command) ? cmd.command : [cmd.command];
+                    const aliases = cmd.command;
                     const aliasesStr = aliases.map(a => `*${p}${a}*`).join(' › ');
                     const usoText = cmd.usage ? ` + _${cmd.usage}_` : '';
                     menu += `❀   ᠀᠀ㅤ۟ ${catEmoji}  ${aliasesStr}${usoText}\n`;
