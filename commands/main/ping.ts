@@ -3,17 +3,42 @@ export default {
     description: 'Verifica la velocidad de respuesta del bot',
     category: 'main',
     group: true,
-    run: (ctx: any) => {
+    run: async (ctx: any) => {
         const jid = ctx.chat || ctx.m?.chat;
         if (!jid) return;
 
-        const timestamp = ctx.m?.messageTimestamp;
-        const realLatency = timestamp ? Math.max(0, Date.now() - (timestamp * 1000)) : 10;
-        
-        const latency = realLatency * 0.025;
+        const start = Date.now();
+        const initialText = `✰ ¡Pong!\n> Tiempo ⴵ ...ms`;
 
-        ctx.sock.sendMessage(jid, {
-            text: `ꕤ Pong: \`${latency.toFixed(2)}ms\``
-        }, { quoted: ctx.m }).catch(() => {});
+        try {
+            const sentMsg = await ctx.sock.sendMessage(jid, {
+                text: initialText
+            }, { quoted: ctx.m });
+
+            const end = Date.now();
+            const latency = end - start;
+            const finalText = `✰ ¡Pong!\n> Tiempo ⴵ ${latency}ms`;
+
+            await ctx.sock.sendMessage(jid, {
+                text: finalText,
+                edit: sentMsg.key
+            });
+
+        } catch (error) {
+            const end = Date.now();
+            const latency = end - start;
+            const finalText = `✰ ¡Pong!\n> Tiempo ⴵ ${latency}ms`;
+            
+            try {
+                const sentMsg = await ctx.sock.sendMessage(jid, {
+                    text: initialText
+                }, { quoted: ctx.m });
+                
+                await ctx.sock.sendMessage(jid, {
+                    text: finalText,
+                    edit: sentMsg.key
+                });
+            } catch (_) {}
+        }
     }
 };
