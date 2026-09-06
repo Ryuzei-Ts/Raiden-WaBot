@@ -34,8 +34,7 @@ setInterval(() => {
     }
 }, 60000);
 
-const normalizeNumber = (x: string): string => 
-    String(x || "").split("@")[0].split(":")[0].replace(/[^\d]/g, "").trim();
+const normalizeNumber = (x: string) => String(x || "").split("@")[0].split(":")[0].replace(/[^\d]/g, "").trim();
 
 const getAlternativeSenderVariants = (normalizedNumberStr: string): string[] => {
     const variants = [normalizedNumberStr];
@@ -208,9 +207,11 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         const adminSet = getAdminSet(groupMetadata.participants);
         const senderVariants = getAlternativeSenderVariants(normalizedSender);
         isAdmins = senderVariants.some(v => adminSet.has(v));
+        
         const rawBotJid = sock.user?.id || sock.user?.jid || '';
         const botBase = normalizeNumber(rawBotJid);
-        isBotAdmins = adminSet.has(botBase);
+        const botVariants = getAlternativeSenderVariants(botBase);
+        isBotAdmins = botVariants.some(v => adminSet.has(v));
     }
 
     if (cmd.admin && !isAdmins && !isOwner) {
