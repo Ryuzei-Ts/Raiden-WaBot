@@ -1,10 +1,51 @@
 import axios from 'axios';
 import yts from 'yt-search';
+import { spawn } from 'child_process';
 import config from '#config';
 
 const LEMPI_KEYS = ['lem488', 'Midnight1', 'Midnight', 'lem691', 'lem678', 'lem957', 'lem293', 'lem144', 'lem459', 'lem501', 'lem141'];
+const STELLAR_KEY = 'Midnight';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const convertVideoToAudioBuffer = (videoBuffer: Buffer): Promise<Buffer> => {
+    return new Promise((resolve, reject) => {
+        const ffmpeg = spawn('ffmpeg', [
+            '-i', 'pipe:0',
+            '-vn',
+            '-c:a', 'libmp3lame',
+            '-b:a', '128k',
+            '-f', 'mp3',
+            'pipe:1'
+        ]);
+
+        const chunks: Buffer[] = [];
+        let errorOutput = '';
+
+        ffmpeg.stdout.on('data', (chunk: Buffer) => {
+            chunks.push(chunk);
+        });
+
+        ffmpeg.stderr.on('data', (err: Buffer) => {
+            errorOutput += err.toString();
+        });
+
+        ffmpeg.on('close', (code) => {
+            if (code === 0) {
+                resolve(Buffer.concat(chunks));
+            } else {
+                reject(new Error(`FFmpeg error (code ${code}): ${errorOutput.slice(-150)}`));
+            }
+        });
+
+        ffmpeg.on('error', (err) => {
+            reject(err);
+        });
+
+        ffmpeg.stdin.write(videoBuffer);
+        ffmpeg.stdin.end();
+    });
+};
 
 const extractDownloadUrl = (data: any): string => {
     const candidate =
@@ -37,7 +78,7 @@ const fetchWithTimeout = async (url: string, timeoutMs = 45000): Promise<any> =>
         const res = await fetch(url, {
             method: 'GET',
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'application/json, text/plain, */*'
             },
             signal: controller.signal
@@ -51,26 +92,44 @@ const fetchWithTimeout = async (url: string, timeoutMs = 45000): Promise<any> =>
     }
 };
 
-const getLempiDownload = async (videoUrl: string): Promise<string> => {
-    const encoded = encodeURIComponent(videoUrl);
-    let lastError = '';
-
-    for (const key of LEMPI_KEYS) {
+const fetchEndpoint = async (url: string, retries = 1): Promise<string> => {
+    for (let attempt = 0; attempt <= retries; attempt++) {
         try {
-            const url = `https://api.lempi.lat/dl/yta?url=${encoded}&apikey=${key}`;
-            console.log(`Intentando con key: ${key}...`);
             const data = await fetchWithTimeout(url, 35000);
             const downloadUrl = extractDownloadUrl(data);
-            console.log(`✅ Key ${key} funcionó`);
             return downloadUrl;
+        } catch (err) {
+            if (attempt === retries) throw err;
+            await sleep(1000);
+        }
+    }
+    throw new Error('Timeout agotado tras reintentos.');
+};
+
+const getDownloadStreamSequential = async (link: string): Promise<{ url: string; isVideo: boolean }> => {
+    const encoded = encodeURIComponent(link);
+    let lastError = '';
+
+    const apis = [
+        { name: 'Lempi YTA', url: `https://api.lempi.lat/dl/yta?url=${encoded}&apikey=${LEMPI_KEYS[0]}`, isVideo: false },
+        { name: 'Lempi YTV', url: `https://api.lempi.lat/dl/ytv?url=${encoded}&apikey=${LEMPI_KEYS[1]}`, isVideo: true },
+        { name: 'Stellar', url: `https://api.stellarwa.xyz/dl/ytmp3?url=${encoded}&key=${STELLAR_KEY}`, isVideo: false }
+    ];
+
+    for (const api of apis) {
+        try {
+            console.log(`Intentando con ${api.name}...`);
+            const result = await fetchEndpoint(api.url);
+            console.log(`✅ ${api.name} funcionó`);
+            return { url: result, isVideo: api.isVideo };
         } catch (err: any) {
-            console.log(`❌ Key ${key} falló: ${err.message}`);
+            console.log(`❌ ${api.name} falló: ${err.message}`);
             lastError = err.message;
             await sleep(500);
         }
     }
 
-    throw new Error(`Todas las keys de Lempi fallaron. Último error: ${lastError}`);
+    throw new Error(`Todas las APIs fallaron. Último error: ${lastError}`);
 };
 
 export default {
@@ -114,7 +173,7 @@ export default {
 
             const thumbBuffer = await axios.get(thumb, { responseType: 'arraybuffer' }).then(res => Buffer.from(res.data));
 
-            const caption = `﹒𝜗ৎ      ࣪  \`${title}\`
+            const caption = `﹒𝜗ৎ      ࣪  *${title}*
 
 ׅ  ׄ  ✿ *Canal* » ${channel}
 ׅ  ׄ  ✿ *Vistas* » ${(views || 0).toLocaleString()}
@@ -128,12 +187,22 @@ export default {
             let audioBuffer: Buffer | null = null;
 
             try {
-                const downloadUrl = await getLempiDownload(videoUrl);
-                const audioRes = await axios.get(downloadUrl, { 
-                    responseType: 'arraybuffer',
-                    timeout: 90000
-                });
-                audioBuffer = Buffer.from(audioRes.data);
+                const result = await getDownloadStreamSequential(videoUrl);
+                
+                if (result.isVideo) {
+                    const videoRes = await axios.get(result.url, { 
+                        responseType: 'arraybuffer',
+                        timeout: 90000
+                    });
+                    const videoBuffer = Buffer.from(videoRes.data);
+                    audioBuffer = await convertVideoToAudioBuffer(videoBuffer);
+                } else {
+                    const audioRes = await axios.get(result.url, { 
+                        responseType: 'arraybuffer',
+                        timeout: 90000
+                    });
+                    audioBuffer = Buffer.from(audioRes.data);
+                }
             } catch (error: any) {
                 console.error("Error en descarga:", error);
                 return await sock.sendMessage(chat, {
