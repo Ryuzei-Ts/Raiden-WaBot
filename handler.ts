@@ -12,13 +12,18 @@ const MAX_GROUP_CACHE = handlerConfig.maxGroupCache || 500;
 const MAX_PROCESSED_MSGS = handlerConfig.maxProcessedMsgs || 2000;
 const RATE_LIMIT_WINDOW_MS = handlerConfig.rateLimitWindow || 3000;
 const MAX_COMMANDS_PER_WINDOW = handlerConfig.maxCommandsPerWindow || 5;
+const COMMAND_TIMEOUT_MS = 5000;
 
 const groupMetaCache = new LRUCache<string, { metadata: any; ts: number }>({
     max: MAX_GROUP_CACHE,
     ttl: META_TTL_MS,
 });
 
-const processedMsgIds = new Set<string>();
+const processedMsgIds = new LRUCache<string, boolean>({
+    max: MAX_PROCESSED_MSGS,
+    ttl: MSG_TTL_MS,
+});
+
 const userRateLimits = new Map<string, { count: number; resetTime: number }>();
 
 export function invalidateGroupCache(chatId: string): void {
@@ -63,6 +68,11 @@ function syncCommandMapIfNeeded(): void {
         for (let i = 0; i < entries.length; i++) {
             const plugin: any = entries[i];
             if (!plugin?.command) continue;
+
+            if (plugin.eval || plugin.exec || plugin.require || plugin.fs) {
+                continue;
+            }
+
             const execFn = plugin.run || plugin.default || (typeof plugin === 'function' ? plugin : null);
             if (!execFn) continue;
             plugin._exec = execFn;
@@ -123,15 +133,7 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
     const msgId = rawMsg?.key?.id;
     if (msgId) {
         if (processedMsgIds.has(msgId)) return;
-        processedMsgIds.add(msgId);
-        if (processedMsgIds.size > MAX_PROCESSED_MSGS) {
-            const iterator = processedMsgIds.values();
-            for (let i = 0; i < 500; i++) {
-                const val = iterator.next().value;
-                if (val) processedMsgIds.delete(val);
-            }
-        }
-        setTimeout(() => processedMsgIds.delete(msgId), MSG_TTL_MS);
+        processedMsgIds.set(msgId, true);
     }
 
     const msg = serialize(sock, rawMsg);
@@ -164,8 +166,6 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         : (normalizedSender.startsWith('52') ? normalizedSender.replace(/^52/, '521') : normalizedSender);
 
     const isGroup = msg.isGroup;
-    
-    // ✅ CAMBIO AQUÍ: Siempre traemos la metadata en grupos (usa la caché de LRU para no saturar)
     const groupMetadata = isGroup ? await getGroupMetadata(sock, chat) : null;
 
     const ownerConfig = (config as any)?.owner;
@@ -180,6 +180,14 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
     }
 
     if (cmd.owner && !isOwner) {
+        queueMicrotask(() => {
+            broadcast('security_event', {
+                type: 'unauthorized_access',
+                command: commandName,
+                sender: normalizedSender,
+                chat
+            });
+        });
         return msg.reply('ׅ  ׄ  ✿ Este comando solo puede ser utilizado por el dueño del bot.');
     }
     if (cmd.group && !isGroup) {
@@ -203,6 +211,14 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
     }
 
     if (cmd.admin && !isAdmins && !isOwner) {
+        queueMicrotask(() => {
+            broadcast('security_event', {
+                type: 'unauthorized_admin_command',
+                command: commandName,
+                sender: normalizedSender,
+                chat
+            });
+        });
         return msg.reply('ׅ  ׄ  ✿ Necesitas ser administrador del grupo para usar este comando.');
     }
     if (cmd.botAdmin && !isBotAdmins) {
@@ -242,7 +258,8 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         }
     });
 
-    const args = spaceIndex === -1 ? [] : msg.body.slice(spaceIndex + 1).trim().split(/ +/);
+    const rawArgs = spaceIndex === -1 ? [] : msg.body.slice(spaceIndex + 1).trim().split(/ +/);
+    const args = rawArgs.map(arg => arg.replace(/[&;|$`]/g, ''));
 
     const ctx = {
         ...msg,
@@ -276,7 +293,17 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         });
 
         try {
-            const result = cmd._exec(ctx);
+            let timerId: NodeJS.Timeout;
+            const timeoutPromise = new Promise((_, reject) => {
+                timerId = setTimeout(() => reject(new Error('TIMEOUT')), COMMAND_TIMEOUT_MS);
+            });
+
+            const result = await Promise.race([
+                Promise.resolve(cmd._exec(ctx)),
+                timeoutPromise
+            ]).finally(() => {
+                clearTimeout(timerId);
+            });
             
             queueMicrotask(() => {
                 broadcast('command_executed', {
