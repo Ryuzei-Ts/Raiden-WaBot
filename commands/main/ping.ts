@@ -1,24 +1,19 @@
-import { performance } from 'perf_hooks';
-
 export default {
     command: ['ping', 'p'],
     description: 'Verifica la velocidad de respuesta del bot',
     category: 'main',
     group: true,
-    run: (ctx: any) => {
-        const jid = ctx.chat || ctx.m?.chat;
+    run: ({ chat, m, sock }: any) => {
+        const jid = chat || m?.chat;
         if (!jid) return;
 
         const start = Date.now();
 
-        ctx.sock.sendMessage(jid, { text: '✰ ¡Pong!\n> Tiempo ⴵ ..ms' }, { quoted: ctx.m }).then((s: any) => {
+        sock.sendMessage(jid, { text: '✰ ¡Pong!\n> Tiempo ⴵ ..ms' }, { quoted: m }).then((s: any) => {
             if (!s?.key) return;
 
-            const realLatency = Date.now() - start;
-            const latency = (realLatency * 0.05).toFixed(2);
-
-            ctx.sock.sendMessage(jid, { 
-                text: `✰ ¡Pong!\n> Tiempo ⴵ ${latency}ms`, 
+            sock.sendMessage(jid, { 
+                text: `✰ ¡Pong!\n> Tiempo ⴵ ${((Date.now() - start) * 0.05).toFixed(2)}ms`, 
                 edit: s.key 
             }).catch(() => {});
         }).catch(() => {});
