@@ -36,7 +36,7 @@ const getFlag = (numberStr: string): string => {
 export default {
     command: ['tagall', 'todos', 'all'],
     description: 'Menciona a todos los participantes del grupo',
-    category: 'group',
+    category: 'admin',
     group: true,
     admin: true,
     run: async (ctx: any) => {
