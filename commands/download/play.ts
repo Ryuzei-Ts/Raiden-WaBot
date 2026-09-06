@@ -5,9 +5,12 @@ import { LRUCache } from 'lru-cache';
 import config from '#config';
 
 const cache = new LRUCache<string, any>({ max: 100, ttl: 1000 * 60 * 60 });
+const downloadCache = new LRUCache<string, { url: string; isVideo: boolean }>({ max: 50, ttl: 1000 * 60 * 2 });
 const LEMPI_KEYS = ['lem488', 'Midnight1', 'Midnight', 'lem691', 'lem678', 'lem957', 'lem293', 'lem144', 'lem459', 'lem501', 'lem141'];
 const STELLAR_KEY = 'Midnight';
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+const formatViews = (v: number) => v >= 1e9 ? (v / 1e9).toFixed(1) + 'B' : v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(1) + 'K' : v.toString();
 
 const convertVideoToAudioBuffer = (videoBuffer: Buffer): Promise<Buffer> => new Promise((resolve, reject) => {
     const ffmpeg = spawn('ffmpeg', ['-i', 'pipe:0', '-vn', '-c:a', 'libmp3lame', '-b:a', '128k', '-f', 'mp3', 'pipe:1']);
@@ -47,6 +50,10 @@ const fetchEndpoint = async (url: string, retries = 1): Promise<string> => {
 };
 
 const getDownloadStreamSequential = async (link: string): Promise<{ url: string; isVideo: boolean }> => {
+    const cacheKey = link.toLowerCase();
+    const cached = downloadCache.get(cacheKey);
+    if (cached) return cached;
+
     const encoded = encodeURIComponent(link);
     let lastError = '';
     const apis = [
@@ -55,7 +62,7 @@ const getDownloadStreamSequential = async (link: string): Promise<{ url: string;
         { name: 'Stellar', url: `https://api.stellarwa.xyz/dl/ytmp3?url=${encoded}&key=${STELLAR_KEY}`, isVideo: false }
     ];
     for (const api of apis) {
-        try { const result = await fetchEndpoint(api.url); return { url: result, isVideo: api.isVideo }; } 
+        try { const result = await fetchEndpoint(api.url); const data = { url: result, isVideo: api.isVideo }; downloadCache.set(cacheKey, data); return data; } 
         catch (err: any) { lastError = err.message; await sleep(500); }
     }
     throw new Error(`Todas las APIs fallaron. Último error: ${lastError}`);
@@ -101,7 +108,7 @@ export default {
             const duration = video.timestamp || video.duration || "";
 
             const thumbBuffer = await axios.get(thumb, { responseType: 'arraybuffer' }).then(res => Buffer.from(res.data));
-            const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Canal* » ${channel}\nׅ  ׄ  ✿ *Vistas* » ${(views || 0).toLocaleString()}\nׅ  ׄ  ✿ *Tiempo* » ${duration}\nׅ  ׄ  ✿ *Link* » ${videoUrl}\n\nׅ  ׄ  ✿ *¡Enviando audio, por favor espera!*`.trim();
+            const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Canal* » ${channel}\nׅ  ׄ  ✿ *Vistas* » ${formatViews(views)}\nׅ  ׄ  ✿ *Tiempo* » ${duration}\nׅ  ׄ  ✿ *Link* » ${videoUrl}\n\nׅ  ׄ  ✿ *¡Enviando audio, por favor espera!*`.trim();
             await sock.sendMessage(chat, { image: thumbBuffer, caption }, { quoted: msg });
 
             let audioBuffer: Buffer | null = null;
