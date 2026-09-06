@@ -5,7 +5,7 @@ import chalk from 'chalk';
 import { broadcast } from '#index';
 
 const groupMetaCache = new Map<string, { metadata: any; ts: number }>();
-const metaTtl = 15000;
+const metaTtl = 5000;
 const commandMap = new Map<string, any>();
 let lastPluginsRef: any = null;
 const processedMsgIds = new Set<string>();
