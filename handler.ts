@@ -84,6 +84,14 @@ async function getGroupMetadata(sock: any, chatId: string) {
     return metadata;
 }
 
+function isParticipantAdmin(participants: any[], userBase: string) {
+    if (!participants || !userBase) return false;
+    return participants.some(p => {
+        if (p.admin !== 'admin' && p.admin !== 'superadmin') return false;
+        return (p.id?.split('@')[0] === userBase || p.lid?.split('@')[0] === userBase || p.phoneNumber?.split('@')[0] === userBase);
+    });
+}
+
 const normalizeNumber = (x: string) => String(x || "").split("@")[0].split(":")[0].replace(/[^\d]/g, "").trim();
 
 export const handler = async (sock: any, rawMsg: any) => {
@@ -157,22 +165,12 @@ export const handler = async (sock: any, rawMsg: any) => {
                 const groupMetadata = await getGroupMetadata(sock, chat);
                 const participants = groupMetadata?.participants || [];
 
-                const adminSet = new Set<string>();
-                for (let i = 0; i < participants.length; i++) {
-                    const p = participants[i];
-                    if (p.admin === 'admin' || p.admin === 'superadmin') {
-                        if (p.id) adminSet.add(p.id.split('@')[0]);
-                        if (p.lid) adminSet.add(p.lid.split('@')[0]);
-                        if (p.phoneNumber) adminSet.add(p.phoneNumber.split('@')[0]);
-                    }
-                }
-
-                isAdmins = adminSet.has(normalizedSender) || adminSet.has(altSender);
+                isAdmins = isParticipantAdmin(participants, normalizedSender) || isParticipantAdmin(participants, altSender);
 
                 if (cmd.botAdmin) {
                     const rawBotJid = sock.user?.id || sock.user?.jid || '';
                     const botBase = normalizeNumber(rawBotJid);
-                    isBotAdmins = adminSet.has(botBase);
+                    isBotAdmins = isParticipantAdmin(participants, botBase);
                 }
             }
 
