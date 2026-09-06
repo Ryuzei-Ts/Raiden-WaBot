@@ -85,21 +85,29 @@ export const handler = async (sock: any, rawMsg: any) => {
         try { realJid = UserJid(sock, msg.chat, msg.sender) || msg.sender; } catch { realJid = msg.sender; }
         const groupMetadata = msg.isGroup ? await getGroupMetadata(sock, msg.chat) : null;
         const normalizedSender = normalizeNumber(realJid);
-        const ownerConfig = config.owner || (global as any)?.owner || [];
-        const allOwnerNumbers = (Array.isArray(ownerConfig) ? ownerConfig : Object.values(ownerConfig).flat()) as string[];
-        const isOwner = allOwnerNumbers.some((num: string) => {
-            const cleanNum = normalizeNumber(num);
-            return (normalizedSender === cleanNum || normalizedSender.replace(/^521/, '52') === cleanNum.replace(/^521/, '52'));
-        });
-        if (cmd.owner && !isOwner) { msg.reply('❌ Este comando solo puede ser utilizado por el dueño del bot.'); return; }
-        if (cmd.group && !msg.isGroup) { msg.reply('❌ Este comando solo se puede usar en grupos.'); return; }
+        const altSender = normalizedSender.startsWith('521') ? normalizedSender.replace(/^521/, '52') : (normalizedSender.startsWith('52') ? normalizedSender.replace(/^52/, '521') : normalizedSender);
+        
+        const ownerConfig = config.owner;
+        let isOwner = false;
+
+        if (ownerConfig instanceof Set) {
+            isOwner = ownerConfig.has(normalizedSender) || ownerConfig.has(altSender);
+        } else if (Array.isArray(ownerConfig)) {
+            isOwner = ownerConfig.some((num: string) => {
+                const cleanNum = normalizeNumber(num);
+                return normalizedSender === cleanNum || altSender === cleanNum;
+            });
+        }
+
+        if (cmd.owner && !isOwner) { msg.reply('ׅ  ׄ  ✿ Este comando solo puede ser utilizado por el dueño del bot.'); return; }
+        if (cmd.group && !msg.isGroup) { msg.reply('ׅ  ׄ  ✿ Este comando solo se puede usar en grupos.'); return; }
         const participants = groupMetadata?.participants || [];
         const isAdmins = msg.isGroup ? isParticipantAdmin(participants, msg.sender?.split('@')[0]) : false;
         const rawBotJid = sock.user?.id || sock.user?.jid || '';
         const botBase = rawBotJid.split('@')[0].split(':')[0];
         const isBotAdmins = msg.isGroup ? isParticipantAdmin(participants, botBase) : false;
-        if (cmd.admin && !isAdmins && !isOwner) { msg.reply('❌ Necesitas ser administrador del grupo para usar este comando.'); return; }
-        if (cmd.botAdmin && !isBotAdmins) { msg.reply('❌ El bot necesita ser administrador del grupo para ejecutar este comando.'); return; }
+        if (cmd.admin && !isAdmins && !isOwner) { msg.reply('ׅ  ׄ  ✿ Necesitas ser administrador del grupo para usar este comando.'); return; }
+        if (cmd.botAdmin && !isBotAdmins) { msg.reply('ׅ  ׄ  ✿ El bot necesita ser administrador del grupo para ejecutar este comando.'); return; }
         const cleanSender = realJid.split('@')[0].split(':')[0] + '@s.whatsapp.net';
         const dbData = (global as any).db?.data;
         if (dbData) {
