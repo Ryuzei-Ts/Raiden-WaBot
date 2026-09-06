@@ -26,7 +26,7 @@ const extractDownloadUrl = (data: any): string => {
         data?.dl;
 
     if (!candidate || typeof candidate !== 'string' || !candidate.startsWith('http')) {
-        throw new Error(`Respuesta sin URL válida: ${JSON.stringify(data).slice(0, 100)}`);
+        throw new Error(`Respuesta sin URL válida`);
     }
 
     return candidate;
@@ -67,24 +67,32 @@ const fetchEndpoint = async (url: string, retries = 1): Promise<string> => {
     throw new Error('Timeout agotado tras reintentos.');
 };
 
-const getDownloadStreamParallel = async (link: string): Promise<string> => {
+const getDownloadStreamSequential = async (link: string): Promise<string> => {
     const encoded = encodeURIComponent(link);
     const key = getRandomLempiKey();
 
-    const targets = [
-        { url: `https://api.lempi.lat/dl/yta?url=${encoded}&apikey=${key}` },
-        { url: `https://api.lempi.lat/dl/ytv?url=${encoded}&apikey=${key}` },
-        { url: `https://api.stellarwa.xyz/dl/ytmp3?url=${encoded}&key=${STELLAR_KEY}` }
+    const apis = [
+        { name: 'Lempi YTA', url: `https://api.lempi.lat/dl/yta?url=${encoded}&apikey=${key}` },
+        { name: 'Lempi YTV', url: `https://api.lempi.lat/dl/ytv?url=${encoded}&apikey=${key}` },
+        { name: 'Stellar', url: `https://api.stellarwa.xyz/dl/ytmp3?url=${encoded}&key=${STELLAR_KEY}` }
     ];
 
-    try {
-        const promises = targets.map(target => fetchEndpoint(target.url));
-        const result = await Promise.any(promises);
-        return result;
-    } catch (err: any) {
-        const errors = err.errors?.map((e: any) => e?.message || e).join(' | ') || err.message;
-        throw new Error(`APIs fallaron: ${errors}`);
+    let lastError = '';
+
+    for (const api of apis) {
+        try {
+            console.log(`Intentando con ${api.name}...`);
+            const result = await fetchEndpoint(api.url);
+            console.log(`✅ ${api.name} funcionó`);
+            return result;
+        } catch (err: any) {
+            console.log(`❌ ${api.name} falló: ${err.message}`);
+            lastError = err.message;
+            await sleep(500);
+        }
     }
+
+    throw new Error(`Todas las APIs fallaron. Último error: ${lastError}`);
 };
 
 export default {
@@ -143,7 +151,7 @@ export default {
             let audioBuffer: Buffer | null = null;
 
             try {
-                const downloadUrl = await getDownloadStreamParallel(videoUrl);
+                const downloadUrl = await getDownloadStreamSequential(videoUrl);
                 const audioRes = await axios.get(downloadUrl, { 
                     responseType: 'arraybuffer',
                     timeout: 90000
