@@ -99,7 +99,7 @@ async function startBot() {
         logger: P({ level: 'silent' }) as any,
         printQRInTerminal: opcion === '1',
         version,
-        browser: Browsers.ubuntu('Firefox'),
+        browser: Browsers.ubuntu('Chrome'),
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'silent' }) as any)
