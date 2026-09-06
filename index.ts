@@ -13,6 +13,8 @@ import path, { join, dirname } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import readline from 'readline';
 import qrcode from 'qrcode';
+import { createServer } from 'http';
+import { WebSocketServer, WebSocket } from 'ws';
 
 import { serialize } from '#simple';
 import { loadDB } from '#db';
@@ -25,6 +27,39 @@ const __dirname = dirname(__filename);
 
 (global as any).botName = config?.botName || 'Raiden-WaBot';
 (global as any).plugins = (global as any).plugins || {};
+
+const httpServer = (global as any).server || (global as any).expressServer || createServer();
+if (!httpServer.listening) {
+    const PORT = process.env.PORT || process.env.WS_PORT || 8080;
+    httpServer.listen(PORT);
+}
+(global as any).server = httpServer;
+
+const wss = new WebSocketServer({ server: httpServer });
+const clients = new Set<WebSocket>();
+
+wss.on('connection', (ws) => {
+    clients.add(ws);
+    ws.send(JSON.stringify({ type: 'status', data: 'Connected to Raiden-WaBot Realtime Stream' }));
+
+    ws.on('close', () => {
+        clients.delete(ws);
+    });
+
+    ws.on('error', (err) => {
+        console.error(chalk.red('WebSocket Client Error:'), err);
+    });
+});
+
+function broadcast(event: string, payload: any) {
+    if (clients.size === 0) return;
+    const message = JSON.stringify({ event, payload, timestamp: Date.now() });
+    for (const client of clients) {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(message);
+        }
+    }
+}
 
 const sDir = path.join(__dirname, 'Session');
 
@@ -89,8 +124,10 @@ async function cargarPlugins(dir = './commands') {
 
         (global as any).plugins = newPlugins;
         console.log(chalk.bold.cyan(`[ SYSTEM ] ${Object.keys(newPlugins).length} plugins cargados en memoria.`));
+        broadcast('plugins_loaded', { count: Object.keys(newPlugins).length });
     } catch (e) {
         console.error(chalk.red('[ ERROR ] Error al cargar plugins:'), e);
+        broadcast('plugins_error', { error: String(e) });
     }
 }
 
@@ -189,6 +226,7 @@ async function startBot() {
                 let code = await sock.requestPairingCode(num);
                 code = code?.match(/.{1,4}/g)?.join("-") || code;
                 console.log(chalk.white.bgBlue(` CODIGO DE VINCULACION `), chalk.white(`: ${code}`));
+                broadcast('pairing_code', { code });
             } catch (err) {
                 console.log(chalk.red('[ ERROR ] Falla al generar código de vinculación:'), err);
                 limpiarSesion();
@@ -209,6 +247,7 @@ async function startBot() {
                 const qrTerminal = await qrcode.toString(qr, { type: 'terminal', small: true });
                 console.log(chalk.bold.cyan('\n[ QR ] ESCANEA EL SIGUIENTE CÓDIGO QR:\n'));
                 console.log(qrTerminal);
+                broadcast('qr_generated', { qr });
             } catch (err) {
                 console.log(chalk.red('[ ERROR ] Error al renderizar el código QR:'), err);
             }
@@ -217,11 +256,13 @@ async function startBot() {
         if (connection === 'open') {
             (global as any).mainConn = sock;
             console.log(chalk.bold.cyan(`\n✿ ${(global as any).botName} conectado y listo ✰\n`));
+            broadcast('bot_status', { status: 'connected', botName: (global as any).botName });
         }
 
         if (connection === 'close') {
             const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
             const isStreamError = lastDisconnect?.error?.message?.includes('Stream Errored');
+            broadcast('bot_status', { status: 'disconnected', statusCode });
 
             if (statusCode === 515 || isStreamError) {
                 console.log(chalk.yellow('[ RECONNECT ] Reiniciando socket por actualización de sesión...'));
@@ -263,6 +304,7 @@ async function startBot() {
             queueMicrotask(() => {
                 handler(sock, rawMsg).catch(() => {});
                 printMessageLog(serialize(sock, rawMsg), sock).catch(() => {});
+                broadcast('message_received', { id: mId, jid, pushName: rawMsg.pushName });
             });
         }
     });
