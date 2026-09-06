@@ -6,14 +6,14 @@ export default {
     run: async (ctx:any) => {
         const jid = ctx.chat || ctx.m?.chat;
         if (!jid) return;
-        const start = Date.now();
+        const timestamp = ctx.m?.messageTimestamp;
+        const realLatency = timestamp ? Math.max(0, Date.now() - (timestamp * 1000)) : 10;
+        const latency = realLatency * 0.025;
         try {
-            const sentMsg = await ctx.sock.sendMessage(jid, { text: '✰ ¡Pong!\n> Tiempo ⴵ ...ms' }, { quoted: ctx.m });
-            const latency = Date.now() - start;
-            await ctx.sock.sendMessage(jid, { text: `✰ ¡Pong!\n> Tiempo ⴵ ${latency}ms`, edit: sentMsg.key });
+            const sentMsg = await ctx.sock.sendMessage(jid, { text: '✰ ¡Pong!\n> Tiempo ⴵ ..ms' }, { quoted: ctx.m });
+            await ctx.sock.sendMessage(jid, { text: `✰ ¡Pong!\n> Tiempo ⴵ ${latency.toFixed(2)}ms`, edit: sentMsg.key });
         } catch (_) {
-            const latency = Date.now() - start;
-            await ctx.sock.sendMessage(jid, { text: `✰ ¡Pong!\n> Tiempo ⴵ ${latency}ms` }, { quoted: ctx.m }).catch(()=>{});
+            await ctx.sock.sendMessage(jid, { text: `✰ ¡Pong!\n> Tiempo ⴵ ${latency.toFixed(2)}ms` }, { quoted: ctx.m }).catch(()=>{});
         }
     }
 };
