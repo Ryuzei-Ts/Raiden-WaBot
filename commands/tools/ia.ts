@@ -3,10 +3,10 @@ import config from '#config';
 
 export default {
     command: ['ia', 'chat', 'bot', 'gpt'],
-    description: 'Responde preguntas usando la API de Delirius',
+    description: 'Responde preguntas utilizando inteligencia artificial',
     category: 'tools',
-    run: async ({ chat, m, sock, args, usedPrefix, prefix }: any) => {
-        const p = usedPrefix || prefix || config.prefix || '.';
+    run: async ({ chat, m, sock, args }: any) => {
+        const msgId = m?.id || m?.key?.id;
 
         try {
             const text = args.join(' ').trim();
@@ -16,7 +16,9 @@ export default {
                 }, { quoted: m });
             }
 
-            const systemPrompt = `Eres ${config.botName}, la Raiden Shogun e Inazuma de Genshin Impact, un bot creado por ${config.devName}. Eres elegante, serena y amable. Responde de forma corta, directa y sin usar ningún emoji.`;
+            global.broadcast?.('cmd_progress', { id: msgId, step: 'ai_thinking', query: text });
+
+            const systemPrompt = `Eres ${config.botName}, la Raiden Shogun de Inazuma (Genshin Impact), creada por ${config.devName}. Eres elegante, serena y amable. Responde de forma corta, directa y sin usar ningún emoji.`;
 
             const endpoint = `https://api.delirius.online/ia/gptprompt?text=${encodeURIComponent(text)}&prompt=${encodeURIComponent(systemPrompt)}`;
 
@@ -35,16 +37,23 @@ export default {
             }
 
             if (!responseText) {
-                throw new Error('No se obtuvo respuesta de la API');
+                throw new Error('No se obtuvo respuesta del servicio');
             }
 
             const cleanResponse = String(responseText)
                 .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F6D0}-\u{1F6FF}\u{1F170}-\u{1F251}]/gu, '')
                 .trim();
 
-            return sock.sendMessage(chat, { text: cleanResponse }, { quoted: m });
+            global.broadcast?.('cmd_progress', { id: msgId, step: 'ai_response_ready' });
+
+            const result = await sock.sendMessage(chat, { text: cleanResponse }, { quoted: m });
+
+            global.broadcast?.('cmd_progress', { id: msgId, step: 'completed' });
+
+            return result;
 
         } catch (error: any) {
+            global.broadcast?.('cmd_progress', { id: msgId, step: 'error', error: error.message || String(error) });
             return sock.sendMessage(chat, { 
                 text: '   ׄ  ✿  Ocurrió un error al procesar tu solicitud.' 
             }, { quoted: m });
