@@ -93,12 +93,14 @@ async function cargarPlugins(dir = './commands') {
     }
 }
 
-const askQuestion = (query: string): Promise<string> => {
+const askQuestion = async (query: string): Promise<string> => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    return new Promise((resolve) => rl.question(query, (ans) => {
-        rl.close();
-        resolve(ans.trim());
-    }));
+    return new Promise((resolve) => {
+        rl.question(query, (ans) => {
+            rl.close();
+            resolve(ans.trim());
+        });
+    });
 };
 
 const displayLoadingMessage = () => {
@@ -108,7 +110,7 @@ const displayLoadingMessage = () => {
 };
 
 async function startBot() {
-    loadDB();
+    await loadDB();
     await cargarPlugins('./commands');
 
     if (!fs.existsSync(sDir)) {
@@ -145,8 +147,8 @@ async function startBot() {
         }
 
         limpiarSesion();
-        if (!fs.existsSync(sDir)) fs.mkdirSync(sDir, { recursive: true });
-        
+        fs.mkdirSync(sDir, { recursive: true });
+
         const reloadedAuth = await useMultiFileAuthState(sDir);
         state = reloadedAuth.state;
         saveCreds = reloadedAuth.saveCreds;
@@ -168,9 +170,9 @@ async function startBot() {
         downloadHistory: false,
         fireInitQueries: false,
         keepAliveIntervalMs: 30000,
-        connectTimeoutMs: 30000,
+        connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: undefined,
-        retryRequestDelayMs: 100,
+        retryRequestDelayMs: 250,
         getMessage: async () => undefined
     });
 
@@ -185,30 +187,39 @@ async function startBot() {
                 code = code?.match(/.{1,4}/g)?.join("-") || code;
                 console.log(chalk.white.bgBlue(` CODIGO DE VINCULACION `), chalk.white(`: ${code}`));
             } catch (err) {
-                console.log(chalk.white('[ ERROR ] solicitud de codigo:'), err);
+                console.log(chalk.red('[ ERROR ] Falla al generar código de vinculación:'), err);
                 limpiarSesion();
-                setTimeout(() => startBot(), 1500);
+                setTimeout(() => startBot(), 2000);
             }
-        }, 1500);
+        }, 3000);
     }
 
-    sock.ev.on('creds.update', saveCreds);
+    sock.ev.on('creds.update', async () => {
+        await saveCreds();
+    });
 
-    sock.ev.on('connection.update', (u) => {
-        if (u.connection === 'open') {
+    sock.ev.on('connection.update', async (u) => {
+        const { connection, lastDisconnect } = u;
+
+        if (connection === 'open') {
             (global as any).mainConn = sock;
             console.log(chalk.bold.cyan(`\n✿ ${(global as any).botName} conectado y listo ✰\n`));
         }
 
-        if (u.connection === 'close') {
-            const statusCode = new Boom(u.lastDisconnect?.error)?.output?.statusCode;
+        if (connection === 'close') {
+            const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
+            const isStreamError = lastDisconnect?.error?.message?.includes('Stream Errored');
 
-            if (statusCode === DisconnectReason.loggedOut || statusCode === DisconnectReason.connectionClosed || statusCode === 515) {
+            if (statusCode === 515 || isStreamError) {
+                console.log(chalk.yellow('[ RECONNECT ] Reiniciando socket por actualización de sesión...'));
+                setTimeout(() => startBot(), 2000);
+            } else if (statusCode === DisconnectReason.loggedOut) {
+                console.log(chalk.red('[ SESSION ] Sesión cerrada desde el teléfono. Limpiando...'));
                 limpiarSesion();
-                setTimeout(() => startBot(), 1500);
+                setTimeout(() => startBot(), 2000);
             } else {
-                limpiarSesion();
-                setTimeout(() => startBot(), 1500);
+                console.log(chalk.yellow(`[ CONEXION ] Desconectado (Status ${statusCode}). Reintentando...`));
+                setTimeout(() => startBot(), 3000);
             }
         }
     });
