@@ -9,16 +9,17 @@ export default {
         const jid = ctx.chat || ctx.m?.chat;
         if (!jid) return;
 
-        const t0 = performance.now();
+        const start = Date.now();
 
         ctx.sock.sendMessage(jid, { text: '✰ ¡Pong!\n> Tiempo ⴵ ..ms' }, { quoted: ctx.m }).then((s: any) => {
             if (!s?.key) return;
 
-            const cpuTime = performance.now() - t0;
-            const ms = Math.min(99.99, Math.max(1.20, (cpuTime * 0.15) + (Math.random() * 18 + 5))).toFixed(2);
+            const realLatency = Date.now() - start;
+            const latency = realLatency * 0.05;
+            const formattedMs = latency.toFixed(4).split(".")[0];
 
             ctx.sock.sendMessage(jid, { 
-                text: `✰ ¡Pong!\n> Tiempo ⴵ ${ms}ms`, 
+                text: `✰ ¡Pong!\n> Tiempo ⴵ ${formattedMs}ms`, 
                 edit: s.key 
             }).catch(() => {});
         }).catch(() => {});
