@@ -59,7 +59,7 @@ const askQuestion = (query: string): Promise<string> => {
 };
 
 const displayLoadingMessage = () => {
-    console.log(chalk.bold.white(`\n\nPor favor, Ingrese el número de WhatsApp.\n${chalk.bold.cyan("Ejemplo: +521XXXXXXXXXX")}\n${chalk.bold.white('---> ')} `));
+    console.log(chalk.bold.white(`\n\nPor favor, Ingrese el número de WhatsApp.\n${chalk.bold.cyan("Ejemplo: +529612014293")}\n${chalk.bold.white('---> ')} `));
 };
 
 const limpiarSesion = () => {
@@ -114,27 +114,18 @@ async function startBot() {
         connectTimeoutMs: 30000,
         defaultQueryTimeoutMs: undefined,
         retryRequestDelayMs: 100,
-        getMessage: async () => undefined,
-        options: {
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--disable-gpu',
-                '--fast-start',
-                '--disable-features=IsolateOrigins,site-per-process'
-            ]
-        }
+        getMessage: async () => undefined
     });
 
     if (usarCodigo && !state.creds.registered) {
         displayLoadingMessage();
         let num = await askQuestion('');
         num = num.replace(/[^0-9]/g, '');
-        if (num.startsWith('52') && !num.startsWith('521') && num.length === 12) {
-            num = '521' + num.slice(2);
+        
+        if (num.startsWith('521') && num.length === 13) {
+            num = '52' + num.slice(3);
         }
+
         setTimeout(async () => {
             try {
                 let code = await sock.requestPairingCode(num);
