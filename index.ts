@@ -72,14 +72,14 @@ const askQuestion = (query: string): Promise<string> => {
 };
 
 const displayLoadingMessage = () => {
-    console.log(chalk.bold.white(`\n\nPor favor, Ingrese el número de WhatsApp.\n${chalk.bold.cyan("Ejemplo: +529612014293")}\n${chalk.bold.white('---> ')} `));
+    console.log(chalk.bold.white(`\n\nPor favor, Ingrese el número de WhatsApp.\n${chalk.bold.cyan("Ejemplo: +521XXXXXXXXXX")}\n${chalk.bold.white('---> ')} `));
 };
 
 const limpiarSesion = () => {
     if (fs.existsSync(sDir)) {
         try {
             fs.rmSync(sDir, { recursive: true, force: true });
-            console.log(chalk.white(`[ ${chalk.cyan('SYSTEM')} ] Sesión eliminada por error crítico o nuevo intento.`));
+            console.log(chalk.white(`[ ${chalk.cyan('SYSTEM')} ] Sesión eliminada.`));
         } catch (err) {
             console.log(chalk.white('[ ERROR ] No se pudo limpiar la sesión:'), err);
         }
@@ -90,15 +90,21 @@ async function startBot() {
     loadDB();
     await cargarPlugins('./commands');
 
+    if (!fs.existsSync(sDir)) {
+        fs.mkdirSync(sDir, { recursive: true });
+    }
+
     const { state, saveCreds } = await useMultiFileAuthState(sDir);
     const { version } = await fetchLatestBaileysVersion();
 
     let opcion: string = '';
     let usarCodigo: boolean = false;
+    let phoneNumber: string = '';
 
     if (!state.creds.registered) {
         limpiarSesion();
-        
+        if (!fs.existsSync(sDir)) fs.mkdirSync(sDir, { recursive: true });
+
         console.log(chalk.cyan(`
       Raiden | Wa Bot
      Powered by Ryuzei-Ts 
@@ -120,13 +126,19 @@ async function startBot() {
             );
             usarCodigo = opcion === "2";
         }
+
+        if (usarCodigo) {
+            displayLoadingMessage();
+            let num = await askQuestion('');
+            phoneNumber = normalizePhone(num);
+        }
     }
 
     const sock = makeWASocket({
         logger: P({ level: 'silent' }) as any,
         printQRInTerminal: opcion === '1',
         version,
-        browser: Browsers.macOS('Safari'),
+        browser: Browsers.ubuntu('Chrome'),
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'silent' }) as any)
@@ -144,31 +156,30 @@ async function startBot() {
         getMessage: async () => undefined
     });
 
-    if (usarCodigo && !state.creds.registered) {
-        displayLoadingMessage();
-        let num = await askQuestion('');
-        num = normalizePhone(num);
+    let codeRequested = false;
 
-        setTimeout(async () => {
-            try {
-                let code = await sock.requestPairingCode(num);
-                code = code?.match(/.{1,4}/g)?.join("-") || code;
-                console.log(chalk.white.bgBlue(` CODIGO DE VINCULACION `), chalk.white(`: ${code}`));
-            } catch (err) {
-                console.log(chalk.white('[ ERROR ] solicitud de codigo:'), err);
-            }
-        }, 3000);
-    }
+    sock.ev.on('connection.update', async (u) => {
+        const { connection, lastDisconnect, qr } = u;
 
-    sock.ev.on('creds.update', saveCreds);
+        if (usarCodigo && !state.creds.registered && !codeRequested && (qr || connection === 'connecting')) {
+            codeRequested = true;
+            setTimeout(async () => {
+                try {
+                    let code = await sock.requestPairingCode(phoneNumber);
+                    code = code?.match(/.{1,4}/g)?.join("-") || code;
+                    console.log(chalk.white.bgBlue(` CODIGO DE VINCULACION `), chalk.white(`: ${code}`));
+                } catch (err) {
+                    console.log(chalk.white('[ ERROR ] solicitud de codigo:'), err);
+                }
+            }, 2000);
+        }
 
-    sock.ev.on('connection.update', (u) => {
-        if (u.connection === 'open') {
+        if (connection === 'open') {
             (global as any).mainConn = sock;
             console.log(chalk.bold.cyan(`\n✿ ${(global as any).botName} conectado y listo ✰\n`));
         }
-        if (u.connection === 'close') {
-            const boom = new Boom(u.lastDisconnect?.error);
+        if (connection === 'close') {
+            const boom = new Boom(lastDisconnect?.error);
             const statusCode = boom?.output?.statusCode;
             const errorMessage = boom?.message || '';
             
@@ -189,6 +200,8 @@ async function startBot() {
             }
         }
     });
+
+    sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type !== 'notify') return;
