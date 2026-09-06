@@ -1,4 +1,3 @@
-import axios from 'axios';
 import yts from 'yt-search';
 import { spawn } from 'child_process';
 import { LRUCache } from 'lru-cache';
@@ -11,6 +10,18 @@ const STELLAR_KEY = 'Midnight';
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 const formatViews = (v: number) => v >= 1e9 ? (v / 1e9).toFixed(1) + 'B' : v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(1) + 'K' : v.toString();
+
+const fetchBuffer = async (url: string, timeoutMs = 90000): Promise<Buffer> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const arrayBuffer = await res.arrayBuffer();
+        return Buffer.from(arrayBuffer);
+    } catch (err) { clearTimeout(timeoutId); throw err; }
+};
 
 const convertVideoToAudioBuffer = (videoBuffer: Buffer): Promise<Buffer> => new Promise((resolve, reject) => {
     const ffmpeg = spawn('ffmpeg', ['-i', 'pipe:0', '-vn', '-c:a', 'libmp3lame', '-b:a', '128k', '-f', 'mp3', 'pipe:1']);
@@ -107,7 +118,7 @@ export default {
             const views = video.views || 0;
             const duration = video.timestamp || video.duration || "";
 
-            const thumbBuffer = await axios.get(thumb, { responseType: 'arraybuffer' }).then(res => Buffer.from(res.data));
+            const thumbBuffer = await fetchBuffer(thumb);
             const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Canal* » ${channel}\nׅ  ׄ  ✿ *Vistas* » ${formatViews(views)}\nׅ  ׄ  ✿ *Tiempo* » ${duration}\nׅ  ׄ  ✿ *Link* » ${videoUrl}\n\nׅ  ׄ  ✿ *¡Enviando audio, por favor espera!*`.trim();
             await sock.sendMessage(chat, { image: thumbBuffer, caption }, { quoted: msg });
 
@@ -115,11 +126,10 @@ export default {
             try {
                 const result = await getDownloadStreamSequential(videoUrl);
                 if (result.isVideo) {
-                    const videoRes = await axios.get(result.url, { responseType: 'arraybuffer', timeout: 90000 });
-                    audioBuffer = await convertVideoToAudioBuffer(Buffer.from(videoRes.data));
+                    const videoBuffer = await fetchBuffer(result.url);
+                    audioBuffer = await convertVideoToAudioBuffer(videoBuffer);
                 } else {
-                    const audioRes = await axios.get(result.url, { responseType: 'arraybuffer', timeout: 90000 });
-                    audioBuffer = Buffer.from(audioRes.data);
+                    audioBuffer = await fetchBuffer(result.url);
                 }
             } catch (error: any) {
                 return await sock.sendMessage(chat, { text: `《✧》 Error al descargar el audio:\n\n❒ *${error.message || error}*\n\n> *Intenta con otro video o más tarde*` }, { quoted: msg });
