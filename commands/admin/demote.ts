@@ -21,7 +21,7 @@ function isOwnerNumber(targetBase: string): boolean {
 export default {
     command: ['demote', 'quitaradmin', 'degradar'],
     description: 'Quita el rango de administrador a un usuario',
-    category: 'grupo',
+    category: 'admin',
     group: true,
     admin: true,
     botAdmin: true,
