@@ -3,11 +3,16 @@ import { registerData, saveDB } from '#db';
 import config from '#config';
 import chalk from 'chalk';
 import { WebSocketServer, WebSocket } from 'ws';
+import { createServer } from 'http';
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT) : (process.env.WS_PORT ? parseInt(process.env.WS_PORT) : 8080);
-const HOST = process.env.HOST || '0.0.0.0';
+const httpServer = (global as any).server || (global as any).expressServer || (global as any).httpServer || createServer();
 
-const wss = new WebSocketServer({ host: HOST, port: PORT });
+if (!httpServer.listening) {
+    const PORT = process.env.PORT || 8080;
+    httpServer.listen(PORT);
+}
+
+const wss = new WebSocketServer({ server: httpServer });
 const clients = new Set<WebSocket>();
 
 wss.on('connection', (ws) => {
