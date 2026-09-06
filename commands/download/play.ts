@@ -119,7 +119,7 @@ const getDownloadStreamSequential = async (link: string, msgId?: string): Promis
 
 export default {
     command: ['play', 'playaudio', 'audio'],
-    description: 'Descarga y envía audio de YouTube (Máx. 7 min / 30 MB)',
+    description: 'Descarga y envía audio de YouTube.',
     category: 'download',
     group: true,
     run: async (ctx: any) => {
