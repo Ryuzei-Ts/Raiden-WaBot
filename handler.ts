@@ -2,41 +2,7 @@ import { serialize, UserJid } from '#simple';
 import { registerData, saveDB } from '#db';
 import config from '#config';
 import chalk from 'chalk';
-import { WebSocketServer, WebSocket } from 'ws';
-import { createServer } from 'http';
-
-const httpServer = (global as any).server || (global as any).expressServer || (global as any).httpServer || createServer();
-
-if (!httpServer.listening) {
-    const PORT = process.env.PORT || 8080;
-    httpServer.listen(PORT);
-}
-
-const wss = new WebSocketServer({ server: httpServer });
-const clients = new Set<WebSocket>();
-
-wss.on('connection', (ws) => {
-    clients.add(ws);
-    ws.send(JSON.stringify({ type: 'status', data: 'Connected to Raiden-WaBot Realtime Stream' }));
-
-    ws.on('close', () => {
-        clients.delete(ws);
-    });
-
-    ws.on('error', (err) => {
-        console.error(chalk.red('WebSocket Client Error:'), err);
-    });
-});
-
-function broadcast(event: string, payload: any) {
-    if (clients.size === 0) return;
-    const message = JSON.stringify({ event, payload, timestamp: Date.now() });
-    for (const client of clients) {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(message);
-        }
-    }
-}
+import { broadcast } from '#index';
 
 const groupMetaCache = new Map<string, { metadata: any; ts: number }>();
 const metaTtl = 5000;
@@ -142,11 +108,13 @@ export const handler = async (sock: any, rawMsg: any) => {
         const dbData = (global as any).db?.data;
         queueMicrotask(() => {
             if (dbData) {
-                const userDb = dbData.users?.[cleanSender];
-                if (userDb) { 
-                    userDb.usedcommands = (userDb.usedcommands || 0) + 1; 
-                    userDb.exp = (userDb.exp || 0) + Math.floor(Math.random() * 10) + 5; 
+                if (!dbData.users) dbData.users = {};
+                if (!dbData.users[cleanSender]) {
+                    dbData.users[cleanSender] = { exp: 0, usedcommands: 0 };
                 }
+                const userDb = dbData.users[cleanSender];
+                userDb.usedcommands = (userDb.usedcommands || 0) + 1; 
+                userDb.exp = (userDb.exp || 0) + Math.floor(Math.random() * 10) + 5; 
                 if (msg.isGroup && dbData.chats?.[chat]?.users?.[cleanSender]) { dbData.chats[chat].users[cleanSender].lastCmd = Date.now(); }
                 saveDB(chat, cleanSender);
 
@@ -162,7 +130,7 @@ export const handler = async (sock: any, rawMsg: any) => {
         
         if (cmd._exec) {
             broadcast('command_executing', { command: commandName, chat, sender: cleanSender });
-            return cmd._exec(ctx);
+            return await cmd._exec(ctx);
         }
     } catch (e: any) {
         if (e?.message?.includes('rate-overlimit') || e?.status === 429) return;
