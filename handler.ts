@@ -36,12 +36,20 @@ setInterval(() => {
 
 const normalizeNumber = (x: string) => String(x || "").split("@")[0].split(":")[0].replace(/[^\d]/g, "").trim();
 
-function isParticipantAdmin(participants: any[], userBase: string) {
-    if (!participants || !userBase) return false;
-    return participants.some(p => {
-        if (p.admin !== 'admin' && p.admin !== 'superadmin') return false;
-        return (p.id?.split('@')[0] === userBase || p.lid?.split('@')[0] === userBase || p.phoneNumber?.split('@')[0] === userBase);
-    });
+function isParticipantAdmin(participants: any[], userBase: string): boolean {
+    if (!participants?.length || !userBase) return false;
+    for (let i = 0; i < participants.length; i++) {
+        const p = participants[i];
+        if (p.admin === 'admin' || p.admin === 'superadmin') {
+            const pId = p.id ? normalizeNumber(p.id) : '';
+            const pLid = p.lid ? normalizeNumber(p.lid) : '';
+            const pPhone = p.phoneNumber ? normalizeNumber(p.phoneNumber) : '';
+            if (pId === userBase || pLid === userBase || pPhone === userBase) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 const commandMap = new Map<string, any>();
