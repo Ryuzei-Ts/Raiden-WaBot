@@ -6,23 +6,27 @@ export default {
     category: 'main',
     group: true,
     run: async ({ chat, m, sock }: any) => {
-        const start = Date.now();
-        const msgTime = m.messageTimestamp ? Number(m.messageTimestamp) * 1000 : start;
-        const speedMs = Math.max(0, start - msgTime);
+        const start = performance.now();
 
-        const sent = await sock.sendMessage(chat, { 
-            text: `✰ ¡Pong!\n> Tiempo ⴵ ${speedMs} ms` 
+        const s = await sock.sendMessage(chat, { 
+            text: '✰ ¡Pong!\n> Tiempo ⴵ ..ms' 
         }, { quoted: m }).catch(() => null);
+
+        if (!s?.key) return;
+
+        const latency = (performance.now() - start).toFixed(2);
+
+        sock.sendMessage(chat, { 
+            text: `✰ ¡Pong!\n> Tiempo ⴵ ${latency}ms`, 
+            edit: s.key 
+        }).catch(() => {});
 
         queueMicrotask(() => {
             broadcast('ping_measured', {
                 chat,
-                speedMs,
-                executionMs: Date.now() - start,
+                latency: Number(latency),
                 timestamp: Date.now()
             });
         });
-
-        return sent;
     }
 };
