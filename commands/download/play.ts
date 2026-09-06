@@ -3,36 +3,33 @@ import { spawn } from 'child_process';
 import { LRUCache } from 'lru-cache';
 import config from '#config';
 
-const cache = new LRUCache<string, any>({ max: 100, ttl: 1000 * 60 * 60 });
-const downloadCache = new LRUCache<string, { url: string; isVideo: boolean }>({ max: 50, ttl: 1000 * 60 * 2 });
+const cache = new LRUCache<string, any>({ max: 100, ttl: 3600000 });
+const downloadCache = new LRUCache<string, { url: string; isVideo: boolean }>({ max: 50, ttl: 120000 });
 const LEMPI_KEYS = ['lem488', 'Midnight1', 'Midnight', 'lem691', 'lem678', 'lem957', 'lem293', 'lem144', 'lem459', 'lem501', 'lem141'];
 const STELLAR_KEY = 'Midnight';
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 const formatViews = (v: number) => v >= 1e9 ? (v / 1e9).toFixed(1) + 'B' : v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(1) + 'K' : v.toString();
 
-const fetchBuffer = async (url: string, timeoutMs = 90000): Promise<Buffer> => {
+const fetchBuffer = (url: string, timeoutMs = 90000): Promise<Buffer> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-        const res = await fetch(url, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const arrayBuffer = await res.arrayBuffer();
-        return Buffer.from(arrayBuffer);
-    } catch (err) { clearTimeout(timeoutId); throw err; }
+    return fetch(url, { signal: controller.signal })
+        .then(res => {
+            clearTimeout(timeoutId);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.arrayBuffer();
+        })
+        .then(Buffer.from)
+        .catch(err => { clearTimeout(timeoutId); throw err; });
 };
 
 const convertVideoToAudioBuffer = (videoBuffer: Buffer): Promise<Buffer> => new Promise((resolve, reject) => {
-    const ffmpeg = spawn('ffmpeg', ['-i', 'pipe:0', '-vn', '-c:a', 'libmp3lame', '-b:a', '128k', '-f', 'mp3', 'pipe:1']);
+    const ffmpeg = spawn('ffmpeg', ['-i', 'pipe:0', '-vn', '-c:a', 'libmp3lame', '-b:a', '128k', '-preset', 'ultrafast', '-f', 'mp3', 'pipe:1']);
     const chunks: Buffer[] = [];
-    let error = '';
     ffmpeg.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
-    ffmpeg.stderr.on('data', (err: Buffer) => error += err.toString());
-    ffmpeg.on('close', (code) => code === 0 ? resolve(Buffer.concat(chunks)) : reject(new Error(`FFmpeg error (code ${code}): ${error.slice(-150)}`)));
+    ffmpeg.on('close', (code) => code === 0 ? resolve(Buffer.concat(chunks)) : reject(new Error(`FFmpeg error (${code})`)));
     ffmpeg.on('error', reject);
-    ffmpeg.stdin.write(videoBuffer);
-    ffmpeg.stdin.end();
+    ffmpeg.stdin.end(videoBuffer);
 });
 
 const extractDownloadUrl = (data: any): string => {
@@ -41,23 +38,16 @@ const extractDownloadUrl = (data: any): string => {
     return candidate;
 };
 
-const fetchWithTimeout = async (url: string, timeoutMs = 45000): Promise<any> => {
+const fetchWithTimeout = (url: string, timeoutMs = 35000): Promise<any> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-        const res = await fetch(url, { method: 'GET', headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Accept': 'application/json, text/plain, */*' }, signal: controller.signal });
-        clearTimeout(timeoutId);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return await res.json();
-    } catch (err) { clearTimeout(timeoutId); throw err; }
-};
-
-const fetchEndpoint = async (url: string, retries = 1): Promise<string> => {
-    for (let attempt = 0; attempt <= retries; attempt++) {
-        try { const data = await fetchWithTimeout(url, 35000); return extractDownloadUrl(data); } 
-        catch (err) { if (attempt === retries) throw err; await sleep(1000); }
-    }
-    throw new Error('Timeout agotado tras reintentos.');
+    return fetch(url, { method: 'GET', headers: { 'User-Agent': 'Mozilla/5.0 Chrome/120.0.0.0 Safari/537.36', 'Accept': 'application/json, text/plain, */*' }, signal: controller.signal })
+        .then(res => {
+            clearTimeout(timeoutId);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.json();
+        })
+        .catch(err => { clearTimeout(timeoutId); throw err; });
 };
 
 const getDownloadStreamSequential = async (link: string): Promise<{ url: string; isVideo: boolean }> => {
@@ -68,15 +58,22 @@ const getDownloadStreamSequential = async (link: string): Promise<{ url: string;
     const encoded = encodeURIComponent(link);
     let lastError = '';
     const apis = [
-        { name: 'Lempi YTA', url: `https://api.lempi.lat/dl/yta?url=${encoded}&apikey=${LEMPI_KEYS[0]}`, isVideo: false },
-        { name: 'Lempi YTV', url: `https://api.lempi.lat/dl/ytv?url=${encoded}&apikey=${LEMPI_KEYS[1]}`, isVideo: true },
-        { name: 'Stellar', url: `https://api.stellarwa.xyz/dl/ytmp3?url=${encoded}&key=${STELLAR_KEY}`, isVideo: false }
+        { url: `https://api.lempi.lat/dl/yta?url=${encoded}&apikey=${LEMPI_KEYS[0]}`, isVideo: false },
+        { url: `https://api.lempi.lat/dl/ytv?url=${encoded}&apikey=${LEMPI_KEYS[1]}`, isVideo: true },
+        { url: `https://api.stellarwa.xyz/dl/ytmp3?url=${encoded}&key=${STELLAR_KEY}`, isVideo: false }
     ];
+
     for (const api of apis) {
-        try { const result = await fetchEndpoint(api.url); const data = { url: result, isVideo: api.isVideo }; downloadCache.set(cacheKey, data); return data; } 
-        catch (err: any) { lastError = err.message; await sleep(500); }
+        try {
+            const data = await fetchWithTimeout(api.url);
+            const result = { url: extractDownloadUrl(data), isVideo: api.isVideo };
+            downloadCache.set(cacheKey, result);
+            return result;
+        } catch (err: any) {
+            lastError = err.message;
+        }
     }
-    throw new Error(`Todas las APIs fallaron. Último error: ${lastError}`);
+    throw new Error(`APIs inaccesibles: ${lastError}`);
 };
 
 export default {
@@ -89,7 +86,7 @@ export default {
         const p = usedPrefix || prefix || config.prefix;
         try {
             const query = args.join(" ").trim();
-            if (!query) return await sock.sendMessage(chat, { text: `ꕤ Ingresa el título o enlace a buscar ✰\n\n> ꕤ *Ejemplo:* ${p}play Kamikaze - Víctor Mendivil` }, { quoted: msg });
+            if (!query) return sock.sendMessage(chat, { text: `ꕤ Ingresa el título o enlace a buscar ✰\n\n> ꕤ *Ejemplo:* ${p}play Kamikaze - Víctor Mendivil` }, { quoted: msg });
 
             let searchQuery = query;
             const urlMatch = query.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/|v\/))([a-zA-Z0-9_-]{11})/);
@@ -99,7 +96,7 @@ export default {
             let video = cache.get(cacheKey);
             if (!video) {
                 const searchResult = await yts(searchQuery);
-                if (!searchResult?.videos?.length) return await sock.sendMessage(chat, { text: "《✧》 No se encontró información del video." }, { quoted: msg });
+                if (!searchResult?.videos?.length) return sock.sendMessage(chat, { text: `   ׄ  ✿  No se encontraron resultados para *${query}*, por favor intenta con otro nombre o enlace.` }, { quoted: msg });
                 video = searchResult.videos[0];
                 const videoId = video.videoId || (urlMatch ? urlMatch[1] : '');
                 video = {
@@ -118,26 +115,26 @@ export default {
             const views = video.views || 0;
             const duration = video.timestamp || video.duration || "";
 
-            const thumbBuffer = await fetchBuffer(thumb);
             const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Canal* » ${channel}\nׅ  ׄ  ✿ *Vistas* » ${formatViews(views)}\nׅ  ׄ  ✿ *Tiempo* » ${duration}\nׅ  ׄ  ✿ *Link* » ${videoUrl}\n\nׅ  ׄ  ✿ *¡Enviando audio, por favor espera!*`.trim();
-            await sock.sendMessage(chat, { image: thumbBuffer, caption }, { quoted: msg });
 
-            let audioBuffer: Buffer | null = null;
-            try {
-                const result = await getDownloadStreamSequential(videoUrl);
-                if (result.isVideo) {
-                    const videoBuffer = await fetchBuffer(result.url);
-                    audioBuffer = await convertVideoToAudioBuffer(videoBuffer);
-                } else {
-                    audioBuffer = await fetchBuffer(result.url);
-                }
-            } catch (error: any) {
-                return await sock.sendMessage(chat, { text: `《✧》 Error al descargar el audio:\n\n❒ *${error.message || error}*\n\n> *Intenta con otro video o más tarde*` }, { quoted: msg });
+            const [thumbBuffer, streamData] = await Promise.all([
+                fetchBuffer(thumb),
+                getDownloadStreamSequential(videoUrl)
+            ]);
+
+            sock.sendMessage(chat, { image: thumbBuffer, caption }, { quoted: msg });
+
+            let audioBuffer: Buffer;
+            if (streamData.isVideo) {
+                const videoBuffer = await fetchBuffer(streamData.url);
+                audioBuffer = await convertVideoToAudioBuffer(videoBuffer);
+            } else {
+                audioBuffer = await fetchBuffer(streamData.url);
             }
-            if (!audioBuffer) return await sock.sendMessage(chat, { text: "《✧》 No se pudo descargar el *audio*, intenta más tarde." }, { quoted: msg });
-            await sock.sendMessage(chat, { audio: audioBuffer, mimetype: "audio/mpeg", fileName: `${title}.mp3`, ptt: false }, { quoted: msg });
+
+            return sock.sendMessage(chat, { audio: audioBuffer, mimetype: "audio/mpeg", fileName: `${title}.mp3`, ptt: false }, { quoted: msg });
         } catch (error: any) {
-            await sock.sendMessage(chat, { text: `《✧》 Ocurrió un error:\n\n❒ *${error.message || error}*\n\n> *Error al procesar la solicitud*` }, { quoted: msg });
+            return sock.sendMessage(chat, { text: `《✧》 Ocurrió un error:\n\n❒ *${error.message || error}*\n\n> *Error al procesar la solicitud*` }, { quoted: msg });
         }
     }
 };
