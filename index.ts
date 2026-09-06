@@ -99,7 +99,7 @@ async function startBot() {
         logger: P({ level: 'silent' }) as any,
         printQRInTerminal: opcion === '1',
         version,
-        browser: Browsers.ubuntu('Chrome'),
+        browser: Browsers.ubuntu('Firefox'),
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'silent' }) as any)
@@ -132,11 +132,14 @@ async function startBot() {
         displayLoadingMessage();
         let num = await askQuestion('');
         num = num.replace(/[^0-9]/g, '');
+        if (num.startsWith('52') && !num.startsWith('521') && num.length === 12) {
+            num = '521' + num.slice(2);
+        }
         setTimeout(async () => {
             try {
                 let code = await sock.requestPairingCode(num);
                 code = code?.match(/.{1,4}/g)?.join("-") || code;
-                console.log(chalk.white.bgCyan(` CODIGO DE VINCULACION `), chalk.white(`: ${code}`));
+                console.log(chalk.white.bgBlue(` CODIGO DE VINCULACION `), chalk.white(`: ${code}`));
             } catch (err) {
                 console.log(chalk.white('[ ERROR ] solicitud de codigo:'), err);
             }
