@@ -17,6 +17,7 @@ import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { LRUCache } from 'lru-cache';
 import debounce from 'lodash.debounce';
+import Agent from 'https';
 
 import { serialize } from '#simple';
 import { loadDB } from '#db';
@@ -65,6 +66,12 @@ const sDir = path.join(__dirname, 'Session');
 const mStore = new LRUCache<string, any>({
     max: 1000,
     ttl: 1000 * 60 * 5
+});
+
+const httpAgent = new Agent.Agent({
+    keepAlive: true,
+    maxSockets: 50,
+    keepAliveMsecs: 10000
 });
 
 const methodCodeQR = process.argv.includes("--qr");
@@ -214,7 +221,8 @@ async function startBot() {
         connectTimeoutMs: 60000,
         defaultQueryTimeoutMs: undefined,
         retryRequestDelayMs: 250,
-        getMessage: async () => undefined
+        getMessage: async () => undefined,
+        fetchOpts: { agent: httpAgent } as any
     });
 
     if (usarCodigo && !state.creds.registered) {
