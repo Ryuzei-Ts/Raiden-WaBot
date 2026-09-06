@@ -39,7 +39,7 @@ export default {
         const botDigits = getDigits(rawBotJid);
         const targetDigits = getDigits(target);
 
-        if (targetDigits === botDigits) {
+        if (targetDigits && botDigits && (targetDigits === botDigits || botDigits.endsWith(targetDigits) || targetDigits.endsWith(botDigits))) {
             return msg.reply('✰ No puedes quitarle el administrador al bot.');
         }
 
