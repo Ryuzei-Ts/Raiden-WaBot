@@ -6,32 +6,64 @@ import { broadcast } from '#index';
 
 const groupMetaCache = new Map<string, { metadata: any; ts: number }>();
 const metaTtl = 5000;
+
 const commandMap = new Map<string, any>();
 let lastPluginsRef: any = null;
-const processedMsgIds = new Set<string>();
+let lastPluginsCount = 0;
+
+const processedMsgIds = new Map<string, number>();
 const msgTtl = 10000;
 
 function syncCommandMap() {
-    if (global.plugins === lastPluginsRef) return;
-    lastPluginsRef = global.plugins;
+    const currentPlugins = global.plugins;
+    if (!currentPlugins || typeof currentPlugins !== 'object') return;
+
+    const currentKeys = Object.keys(currentPlugins);
+    if (currentPlugins === lastPluginsRef && currentKeys.length === lastPluginsCount) return;
+
+    lastPluginsRef = currentPlugins;
+    lastPluginsCount = currentKeys.length;
     commandMap.clear();
-    if (lastPluginsRef && typeof lastPluginsRef === 'object') {
-        const keys = Object.keys(lastPluginsRef);
-        for (let i = 0; i < keys.length; i++) {
-            const plugin = lastPluginsRef[keys[i]];
-            if (!plugin?.command) continue;
-            if (plugin.run || plugin.default) { plugin._exec = plugin.run || plugin.default; } 
-            else if (typeof plugin === 'function') { plugin._exec = plugin; }
-            const cmd = plugin.command;
-            if (Array.isArray(cmd)) { for (let j = 0; j < cmd.length; j++) commandMap.set(String(cmd[j]).toLowerCase(), plugin); } 
-            else { commandMap.set(String(cmd).toLowerCase(), plugin); }
+
+    for (let i = 0; i < currentKeys.length; i++) {
+        const plugin = currentPlugins[currentKeys[i]];
+        if (!plugin?.command) continue;
+
+        if (plugin.run || plugin.default) {
+            plugin._exec = plugin.run || plugin.default;
+        } else if (typeof plugin === 'function') {
+            plugin._exec = plugin;
+        }
+
+        const cmd = plugin.command;
+        if (Array.isArray(cmd)) {
+            for (let j = 0; j < cmd.length; j++) {
+                commandMap.set(String(cmd[j]).toLowerCase(), plugin);
+            }
+        } else {
+            commandMap.set(String(cmd).toLowerCase(), plugin);
         }
     }
 }
 
+setInterval(() => {
+    const now = Date.now();
+
+    for (const [key, value] of groupMetaCache.entries()) {
+        if (now - value.ts > metaTtl) groupMetaCache.delete(key);
+    }
+
+    for (const [id, ts] of processedMsgIds.entries()) {
+        if (now - ts > msgTtl) processedMsgIds.delete(id);
+    }
+}, 60000);
+
 function getCachedMeta(groupJid: string) {
     const c = groupMetaCache.get(groupJid);
-    if (!c || Date.now() - c.ts > metaTtl) { if (c) groupMetaCache.delete(groupJid); return null; }
+    if (!c || Date.now() - c.ts > metaTtl) {
+        if (c) groupMetaCache.delete(groupJid);
+        return null;
+    }
     return c.metadata;
 }
 
@@ -41,9 +73,9 @@ function setCachedMeta(groupJid: string, metadata: any) {
 
 async function getGroupMetadata(sock: any, chatId: string) {
     let metadata = getCachedMeta(chatId);
-    if (!metadata) { 
-        metadata = await sock.groupMetadata(chatId).catch(() => null); 
-        if (metadata) setCachedMeta(chatId, metadata); 
+    if (!metadata) {
+        metadata = await sock.groupMetadata(chatId).catch(() => null);
+        if (metadata) setCachedMeta(chatId, metadata);
     }
     return metadata;
 }
@@ -56,8 +88,7 @@ export const handler = async (sock: any, rawMsg: any) => {
         const msgId = rawMsg?.key?.id;
         if (msgId) {
             if (processedMsgIds.has(msgId)) return;
-            processedMsgIds.add(msgId);
-            setTimeout(() => processedMsgIds.delete(msgId), msgTtl);
+            processedMsgIds.set(msgId, startTime);
         }
 
         const msg = serialize(sock, rawMsg);
@@ -93,23 +124,23 @@ export const handler = async (sock: any, rawMsg: any) => {
         try { realJid = UserJid(sock, chat, msg.sender) || msg.sender; } catch { realJid = msg.sender; }
         const normalizedSender = normalizeNumber(realJid);
         const altSender = normalizedSender.startsWith('521') ? normalizedSender.replace(/^521/, '52') : (normalizedSender.startsWith('52') ? normalizedSender.replace(/^52/, '521') : normalizedSender);
-        
+
         const ownerConfig = config.owner;
         let isOwner = false;
-        if (ownerConfig instanceof Set) { 
-            isOwner = ownerConfig.has(normalizedSender) || ownerConfig.has(altSender); 
-        } else if (Array.isArray(ownerConfig)) { 
-            isOwner = ownerConfig.some((num: string) => { const cleanNum = normalizeNumber(num); return normalizedSender === cleanNum || altSender === cleanNum; }); 
+        if (ownerConfig instanceof Set) {
+            isOwner = ownerConfig.has(normalizedSender) || ownerConfig.has(altSender);
+        } else if (Array.isArray(ownerConfig)) {
+            isOwner = ownerConfig.some((num: string) => { const cleanNum = normalizeNumber(num); return normalizedSender === cleanNum || altSender === cleanNum; });
         }
 
-        if (cmd.owner && !isOwner) { 
-            msg.reply('ׅ  ׄ  ✿ Este comando solo puede ser utilizado por el dueño del bot.'); 
-            return; 
+        if (cmd.owner && !isOwner) {
+            msg.reply('ׅ  ׄ  ✿ Este comando solo puede ser utilizado por el dueño del bot.');
+            return;
         }
 
-        if (cmd.group && !msg.isGroup) { 
-            msg.reply('ׅ  ׄ  ✿ Este comando solo se puede usar en grupos.'); 
-            return; 
+        if (cmd.group && !msg.isGroup) {
+            msg.reply('ׅ  ׄ  ✿ Este comando solo se puede usar en grupos.');
+            return;
         }
 
         let isAdmins = false;
@@ -121,7 +152,7 @@ export const handler = async (sock: any, rawMsg: any) => {
             } else {
                 const groupMetadata = await getGroupMetadata(sock, chat);
                 const participants = groupMetadata?.participants || [];
-                
+
                 const adminSet = new Set<string>();
                 for (let i = 0; i < participants.length; i++) {
                     const p = participants[i];
@@ -141,14 +172,14 @@ export const handler = async (sock: any, rawMsg: any) => {
                 }
             }
 
-            if (cmd.admin && !isAdmins) { 
-                msg.reply('ׅ  ׄ  ✿ Necesitas ser administrador del grupo para usar este comando.'); 
-                return; 
+            if (cmd.admin && !isAdmins) {
+                msg.reply('ׅ  ׄ  ✿ Necesitas ser administrador del grupo para usar este comando.');
+                return;
             }
 
-            if (cmd.botAdmin && !isBotAdmins) { 
-                msg.reply('ׅ  ׄ  ✿ El bot necesita ser administrador del grupo para ejecutar este comando.'); 
-                return; 
+            if (cmd.botAdmin && !isBotAdmins) {
+                msg.reply('ׅ  ׄ  ✿ El bot necesita ser administrador del grupo para ejecutar este comando.');
+                return;
             }
         }
 
@@ -162,8 +193,8 @@ export const handler = async (sock: any, rawMsg: any) => {
                     dbData.users[cleanSender] = { exp: 0, usedcommands: 0 };
                 }
                 const userDb = dbData.users[cleanSender];
-                userDb.usedcommands = (userDb.usedcommands || 0) + 1; 
-                userDb.exp = (userDb.exp || 0) + Math.floor(Math.random() * 10) + 5; 
+                userDb.usedcommands = (userDb.usedcommands || 0) + 1;
+                userDb.exp = (userDb.exp || 0) + Math.floor(Math.random() * 10) + 5;
                 if (msg.isGroup && dbData.chats?.[chat]?.users?.[cleanSender]) { dbData.chats[chat].users[cleanSender].lastCmd = Date.now(); }
                 saveDB(chat, cleanSender);
 
@@ -176,45 +207,45 @@ export const handler = async (sock: any, rawMsg: any) => {
             }
         });
 
-        const ctx = { 
-            ...msg, 
-            sock, 
-            m: msg, 
-            msg, 
-            args, 
-            command: commandName, 
-            prefix, 
-            usedPrefix: prefix, 
-            owner: isOwner, 
-            admin: isAdmins, 
-            botAdmin: isBotAdmins, 
-            chat, 
-            db: (global as any).db, 
-            user: dbData?.users?.[cleanSender] || {}, 
-            chatDb: dbData?.chats?.[chat] || {}, 
-            edit: (text: string, key: any) => { 
-                if (!key) return Promise.resolve(null); 
-                return sock.sendMessage(chat, { text, edit: key }); 
-            } 
+        const ctx = {
+            ...msg,
+            sock,
+            m: msg,
+            msg,
+            args,
+            command: commandName,
+            prefix,
+            usedPrefix: prefix,
+            owner: isOwner,
+            admin: isAdmins,
+            botAdmin: isBotAdmins,
+            chat,
+            db: (global as any).db,
+            user: dbData?.users?.[cleanSender] || {},
+            chatDb: dbData?.chats?.[chat] || {},
+            edit: (text: string, key: any) => {
+                if (!key) return Promise.resolve(null);
+                return sock.sendMessage(chat, { text, edit: key });
+            }
         };
-        
+
         if (cmd._exec) {
             queueMicrotask(() => {
-                broadcast('command_executing', { 
-                    command: commandName, 
-                    chat, 
-                    sender: cleanSender 
+                broadcast('command_executing', {
+                    command: commandName,
+                    chat,
+                    sender: cleanSender
                 });
             });
 
             const result = await cmd._exec(ctx);
 
             queueMicrotask(() => {
-                broadcast('command_executed', { 
-                    command: commandName, 
-                    chat, 
-                    sender: cleanSender, 
-                    executionTimeMs: Date.now() - startTime 
+                broadcast('command_executed', {
+                    command: commandName,
+                    chat,
+                    sender: cleanSender,
+                    executionTimeMs: Date.now() - startTime
                 });
             });
 
@@ -225,9 +256,9 @@ export const handler = async (sock: any, rawMsg: any) => {
         if (!e?.message?.includes('jidDecode')) {
             console.error(chalk.red('Error en handler:'), e);
             queueMicrotask(() => {
-                broadcast('handler_error', { 
+                broadcast('handler_error', {
                     error: e?.message || 'Unknown error',
-                    stack: e?.stack 
+                    stack: e?.stack
                 });
             });
         }
