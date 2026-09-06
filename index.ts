@@ -51,7 +51,7 @@ wss.on('connection', (ws) => {
     });
 });
 
-function broadcast(event: string, payload: any) {
+export function broadcast(event: string, payload: any) {
     if (clients.size === 0) return;
     const message = JSON.stringify({ event, payload, timestamp: Date.now() });
     for (const client of clients) {
@@ -60,6 +60,8 @@ function broadcast(event: string, payload: any) {
         }
     }
 }
+
+(global as any).broadcast = broadcast;
 
 const sDir = path.join(__dirname, 'Session');
 
