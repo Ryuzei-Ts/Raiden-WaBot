@@ -1,3 +1,4 @@
+import { UserJid } from '#simple';
 import config from '#config';
 import { broadcast } from '#index';
 
@@ -50,10 +51,10 @@ export default {
 
             const parsedParticipants = [];
             for (const u of participantes) {
-                const jid = u.id || '';
-                const numberOnly = jid.split('@')[0].split(':')[0].replace(/[^\d]/g, "");
+                const resolvedJid = UserJid(sock, chat, u.id) || u.id;
+                const numberOnly = String(resolvedJid).split('@')[0].split(':')[0].replace(/[^\d]/g, "");
                 parsedParticipants.push({
-                    id: jid,
+                    id: resolvedJid,
                     number: numberOnly,
                     flag: getFlag(numberOnly)
                 });
