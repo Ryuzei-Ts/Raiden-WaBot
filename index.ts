@@ -206,6 +206,38 @@ async function startBot() {
 
 startBot().catch(() => {});
 
+const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+const originalStderrWrite = process.stderr.write.bind(process.stderr);
+
+const filterNoise = (chunk: any, encoding?: any, callback?: any) => {
+    const str = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+    
+    if (
+        str.includes('Closing open session') ||
+        str.includes('Closing session') ||
+        str.includes('SessionEntry') ||
+        str.includes('ephemeralKeyPair') ||
+        str.includes('currentRatchet') ||
+        str.includes('prekey bundle') ||
+        str.includes('chainKey') ||
+        str.includes('registrationId') ||
+        str.includes('bad-mac') ||
+        str.includes('Bad MAC') ||
+        str.includes('Failed to decrypt') ||
+        str.includes('Session error') ||
+        str.includes('Session error:') ||
+        str.includes('Error: bad-mac')
+    ) {
+        if (typeof callback === 'function') callback();
+        return true;
+    }
+    
+    return originalStdoutWrite(chunk, encoding, callback);
+};
+
+process.stdout.write = filterNoise as any;
+process.stderr.write = filterNoise as any;
+
 process.on('uncaughtException', () => {});
 process.on('unhandledRejection', () => {});
 process.on('uncaughtExceptionMonitor', () => {});
