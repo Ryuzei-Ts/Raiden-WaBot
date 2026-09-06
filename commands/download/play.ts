@@ -10,6 +10,12 @@ const STELLAR_KEY = 'Midnight';
 
 const formatViews = (v: number) => v >= 1e9 ? (v / 1e9).toFixed(1) + 'B' : v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(1) + 'K' : v.toString();
 
+const emitProgress = (msgId: string, step: string, extraData: Record<string, any> = {}) => {
+    queueMicrotask(() => {
+        global.broadcast?.('cmd_progress', { id: msgId, step, ...extraData });
+    });
+};
+
 const fetchBuffer = (url: string, timeoutMs = 90000): Promise<Buffer> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -65,7 +71,7 @@ const getDownloadStreamSequential = async (link: string, msgId?: string): Promis
 
     for (let i = 0; i < apis.length; i++) {
         const api = apis[i];
-        global.broadcast?.('cmd_progress', { id: msgId, step: 'requesting_api', apiIndex: i + 1, totalApis: apis.length });
+        if (msgId) emitProgress(msgId, 'requesting_api', { apiIndex: i + 1, totalApis: apis.length });
         try {
             const data = await fetchWithTimeout(api.url);
             const result = { url: extractDownloadUrl(data), isVideo: api.isVideo };
@@ -92,7 +98,7 @@ export default {
             const query = args.join(" ").trim();
             if (!query) return sock.sendMessage(chat, { text: `ꕤ Ingresa el título o enlace a buscar ✰\n\n> ꕤ *Ejemplo:* ${p}play Kamikaze - Víctor Mendivil` }, { quoted: msg });
 
-            global.broadcast?.('cmd_progress', { id: msgId, step: 'search_started', query });
+            emitProgress(msgId, 'search_started', { query });
 
             let searchQuery = query;
             const urlMatch = query.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/|v\/))([a-zA-Z0-9_-]{11})/);
@@ -104,7 +110,7 @@ export default {
             if (!video) {
                 const searchResult = await yts(searchQuery);
                 if (!searchResult?.videos?.length) {
-                    global.broadcast?.('cmd_progress', { id: msgId, step: 'no_results', query });
+                    emitProgress(msgId, 'no_results', { query });
                     return sock.sendMessage(chat, { text: `   ׄ  ✿  No se encontraron resultados para *${query}*, por favor intenta con otro nombre o enlace.` }, { quoted: msg });
                 }
                 video = searchResult.videos[0];
@@ -125,47 +131,51 @@ export default {
             const views = video.views || 0;
             const duration = video.timestamp || video.duration || "";
 
-            global.broadcast?.('cmd_progress', {
-                id: msgId,
-                step: 'media_found',
-                title,
-                duration,
-                channel,
-                videoUrl
-            });
+            emitProgress(msgId, 'media_found', { title, duration, channel, videoUrl });
 
             const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Canal* » ${channel}\nׅ  ׄ  ✿ *Vistas* » ${formatViews(views)}\nׅ  ׄ  ✿ *Tiempo* » ${duration}\nׅ  ׄ  ✿ *Link* » ${videoUrl}\n\nׅ  ׄ  ✿ *¡Enviando audio, por favor espera!*`.trim();
 
-            global.broadcast?.('cmd_progress', { id: msgId, step: 'fetching_thumbnail_and_stream' });
+            emitProgress(msgId, 'fetching_thumbnail');
 
-            const [thumbBuffer, streamData] = await Promise.all([
-                fetchBuffer(thumb),
-                getDownloadStreamSequential(videoUrl, msgId)
-            ]);
+            const streamPromise = getDownloadStreamSequential(videoUrl, msgId);
 
-            await sock.sendMessage(chat, { image: thumbBuffer, caption }, { quoted: msg });
-            global.broadcast?.('cmd_progress', { id: msgId, step: 'thumbnail_sent' });
+            const thumbBuffer = await fetchBuffer(thumb).catch(() => null);
+
+            if (thumbBuffer) {
+                await sock.sendMessage(chat, { image: thumbBuffer, caption }, { quoted: msg });
+            } else {
+                await sock.sendMessage(chat, { text: caption }, { quoted: msg });
+            }
+
+            emitProgress(msgId, 'thumbnail_sent');
+
+            const streamData = await streamPromise;
 
             let audioBuffer: Buffer;
             if (streamData.isVideo) {
-                global.broadcast?.('cmd_progress', { id: msgId, step: 'downloading_video_stream' });
+                emitProgress(msgId, 'downloading_video_stream');
                 const videoBuffer = await fetchBuffer(streamData.url);
                 
-                global.broadcast?.('cmd_progress', { id: msgId, step: 'converting_video_to_audio' });
+                emitProgress(msgId, 'converting_video_to_audio');
                 audioBuffer = await convertVideoToAudioBuffer(videoBuffer);
             } else {
-                global.broadcast?.('cmd_progress', { id: msgId, step: 'downloading_audio_stream' });
+                emitProgress(msgId, 'downloading_audio_stream');
                 audioBuffer = await fetchBuffer(streamData.url);
             }
 
-            global.broadcast?.('cmd_progress', { id: msgId, step: 'sending_audio_to_whatsapp' });
-            const result = await sock.sendMessage(chat, { audio: audioBuffer, mimetype: "audio/mpeg", fileName: `${title}.mp3`, ptt: false }, { quoted: msg });
+            emitProgress(msgId, 'sending_audio_to_whatsapp');
+            const result = await sock.sendMessage(chat, { 
+                audio: audioBuffer, 
+                mimetype: "audio/mpeg", 
+                fileName: `${title}.mp3`, 
+                ptt: false 
+            }, { quoted: msg });
 
-            global.broadcast?.('cmd_progress', { id: msgId, step: 'completed', title });
+            emitProgress(msgId, 'completed', { title });
 
             return result;
         } catch (error: any) {
-            global.broadcast?.('cmd_progress', { id: msgId, step: 'error', error: error.message || String(error) });
+            emitProgress(msgId, 'error', { error: error.message || String(error) });
             return sock.sendMessage(chat, { text: `《✧》 Ocurrió un error:\n\n❒ *${error.message || error}*\n\n> *Error al procesar la solicitud*` }, { quoted: msg });
         }
     }
