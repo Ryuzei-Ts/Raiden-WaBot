@@ -25,8 +25,8 @@ export default {
             for (const name in plugins) {
                 const plugin = plugins[name];
                 if (!plugin?.command) continue;
+                if (plugin.owner === true) continue;
                 const cat = (plugin.category || 'otros').toLowerCase();
-                if (cat === 'owner') continue;
                 if (!categories[cat]) categories[cat] = [];
                 const aliases = Array.isArray(plugin.command) ? plugin.command : [plugin.command];
                 const uniqueAliases = [...new Set(aliases)];
@@ -90,7 +90,7 @@ export default {
                 menu += `\n ㅤׅㅤ۫ㅤㅤ      ﹙❀﹚ㅤׅㅤㅤ˚ㅤ\n`;
             }
 
-            menu += `\n> ׅ  ׄ  ✿  Made with love by ${config.devName}`;
+            menu += `\n> ׅ  ׄ  ✿  Made with love by *${config.devName}*`;
 
             const textMessage = menu;
 
