@@ -12,6 +12,7 @@
     "#config": "./config.ts",
     "#simple": "./lib/simple.ts",
     "#db": "./lib/database.ts",
+    "#logomaker": "./lib/logomaker.ts",
     "#handler": "./handler.ts",
     "#index": "./index.ts"
   },
