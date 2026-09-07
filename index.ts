@@ -57,11 +57,6 @@ const findAvailablePortFast = async (start = 8800, end = 1, batchSize = 100): Pr
         if (await checkPortAvailable(envPort)) return envPort;
     }
 
-    const priorityPorts = [8080, 5311, 5321, 3000];
-    for (const p of priorityPorts) {
-        if (await checkPortAvailable(p)) return p;
-    }
-
     for (let current = start; current >= end; current -= batchSize) {
         const batchEnd = Math.max(end, current - batchSize + 1);
         const tasks: Promise<number | null>[] = [];
@@ -84,11 +79,7 @@ const httpServer: HttpServer = globalThis.server || globalThis.expressServer || 
 
 if (!httpServer.listening) {
     findAvailablePortFast(8800, 1, 100).then((port) => {
-        httpServer.listen(port, '0.0.0.0', () => {
-            const addressInfo = httpServer.address();
-            const boundPort = typeof addressInfo === 'object' && addressInfo ? addressInfo.port : port;
-            console.log(chalk.bold.green(`[ SERVER ] WS/HTTP activo en 0.0.0.0:${boundPort}`));
-        });
+        httpServer.listen(port, '0.0.0.0');
     });
 }
 
@@ -188,7 +179,6 @@ async function cargarPlugins(dir = './commands') {
         );
 
         globalThis.plugins = newPlugins;
-        console.log(chalk.bold.cyan(`[ SYSTEM ] ${Object.keys(newPlugins).length} plugins cargados en memoria.`));
         broadcast('plugins_loaded', { count: Object.keys(newPlugins).length });
     } catch (e) {
         console.error(chalk.red('[ ERROR ] Error al cargar plugins:'), e);
