@@ -13,7 +13,8 @@ import path, { join, dirname } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import readline from 'readline';
 import qrcode from 'qrcode';
-import { createServer } from 'http';
+import { createServer, Server as HttpServer } from 'http';
+import { createServer as createNetServer } from 'net';
 import { WebSocketServer, WebSocket } from 'ws';
 import { LRUCache } from 'lru-cache';
 import debounce from 'lodash.debounce';
@@ -39,11 +40,58 @@ declare global {
 globalThis.botName = config?.botName || 'Raiden-WaBot';
 globalThis.plugins = globalThis.plugins || {};
 
-const httpServer = globalThis.server || globalThis.expressServer || createServer();
+const checkPortAvailable = (port: number, host = '0.0.0.0'): Promise<boolean> => {
+    return new Promise((resolve) => {
+        const tester = createNetServer();
+        tester.once('error', () => resolve(false));
+        tester.once('listening', () => {
+            tester.close(() => resolve(true));
+        });
+        tester.listen(port, host);
+    });
+};
+
+const findAvailablePortFast = async (start = 8800, end = 1, batchSize = 100): Promise<number> => {
+    if (process.env.PORT) {
+        const envPort = Number(process.env.PORT);
+        if (await checkPortAvailable(envPort)) return envPort;
+    }
+
+    const priorityPorts = [8080, 5311, 5321, 3000];
+    for (const p of priorityPorts) {
+        if (await checkPortAvailable(p)) return p;
+    }
+
+    for (let current = start; current >= end; current -= batchSize) {
+        const batchEnd = Math.max(end, current - batchSize + 1);
+        const tasks: Promise<number | null>[] = [];
+
+        for (let p = current; p >= batchEnd; p--) {
+            tasks.push(
+                checkPortAvailable(p).then((available) => (available ? p : null))
+            );
+        }
+
+        const results = await Promise.all(tasks);
+        const availablePort = results.find((p) => p !== null);
+        if (availablePort) return availablePort;
+    }
+
+    return 0;
+};
+
+const httpServer: HttpServer = globalThis.server || globalThis.expressServer || createServer();
+
 if (!httpServer.listening) {
-    const PORT = process.env.PORT || process.env.WS_PORT || 8080;
-    httpServer.listen(PORT);
+    findAvailablePortFast(8800, 1, 100).then((port) => {
+        httpServer.listen(port, '0.0.0.0', () => {
+            const addressInfo = httpServer.address();
+            const boundPort = typeof addressInfo === 'object' && addressInfo ? addressInfo.port : port;
+            console.log(chalk.bold.green(`[ SERVER ] WS/HTTP activo en 0.0.0.0:${boundPort}`));
+        });
+    });
 }
+
 globalThis.server = httpServer;
 
 const wss = new WebSocketServer({ server: httpServer });
@@ -302,49 +350,49 @@ async function startBot() {
         }
     });
 
-sock.ev.on('messages.upsert', ({ messages, type }) => {
-    if (type !== 'notify') return;
+    sock.ev.on('messages.upsert', ({ messages, type }) => {
+        if (type !== 'notify') return;
 
-    const len = messages.length;
-    const serializedCache = new Map();
+        const len = messages.length;
+        const serializedCache = new Map();
 
-    for (let i = 0; i < len; i++) {
-        const rawMsg = messages[i];
-        const mId = rawMsg?.key?.id;
-        if (!mId || !rawMsg.message) continue;
+        for (let i = 0; i < len; i++) {
+            const rawMsg = messages[i];
+            const mId = rawMsg?.key?.id;
+            if (!mId || !rawMsg.message) continue;
 
-        const jid = rawMsg.key.remoteJid || '';
-        if (jid === 'status@broadcast' || jid.endsWith('@broadcast')) continue;
+            const jid = rawMsg.key.remoteJid || '';
+            if (jid === 'status@broadcast' || jid.endsWith('@broadcast')) continue;
 
-        if (mStore.has(mId)) continue;
-        mStore.set(mId, true);
+            if (mStore.has(mId)) continue;
+            mStore.set(mId, true);
 
-        const msg = serialize(sock, rawMsg);
-        if (!msg) continue;
+            const msg = serialize(sock, rawMsg);
+            if (!msg) continue;
 
-        serializedCache.set(mId, msg);
+            serializedCache.set(mId, msg);
 
-        handler(sock, rawMsg, msg).catch(() => {});
+            handler(sock, rawMsg, msg).catch(() => {});
 
-        queueMicrotask(() => {
-            const cachedMsg = serializedCache.get(mId) || msg;
-            printMessageLog(cachedMsg, sock).catch(() => {});
-            broadcast('message_received', {
-                id: mId,
-                jid,
-                pushName: rawMsg.pushName,
-                body: cachedMsg.body?.substring(0, 100) || ''
+            queueMicrotask(() => {
+                const cachedMsg = serializedCache.get(mId) || msg;
+                printMessageLog(cachedMsg, sock).catch(() => {});
+                broadcast('message_received', {
+                    id: mId,
+                    jid,
+                    pushName: rawMsg.pushName,
+                    body: cachedMsg.body?.substring(0, 100) || ''
+                });
             });
-        });
-    }
+        }
 
-    if (serializedCache.size > 0) {
-        queueMicrotask(() => {
-            serializedCache.clear();
-        });
-    }
-});
-    
+        if (serializedCache.size > 0) {
+            queueMicrotask(() => {
+                serializedCache.clear();
+            });
+        }
+    });
+
     const commandsPath = path.join(__dirname, 'commands');
     if (fs.existsSync(commandsPath)) {
         const reloadCommandsDebounced = debounce(() => {
