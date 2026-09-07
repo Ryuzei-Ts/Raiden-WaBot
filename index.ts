@@ -302,30 +302,49 @@ async function startBot() {
         }
     });
 
-    sock.ev.on('messages.upsert', ({ messages, type }) => {
-        if (type !== 'notify') return;
+sock.ev.on('messages.upsert', ({ messages, type }) => {
+    if (type !== 'notify') return;
 
-        const len = messages.length;
-        for (let i = 0; i < len; i++) {
-            const rawMsg = messages[i];
-            const mId = rawMsg?.key?.id;
-            if (!mId || !rawMsg.message) continue;
+    const len = messages.length;
+    const serializedCache = new Map();
 
-            const jid = rawMsg.key.remoteJid || '';
-            if (jid === 'status@broadcast' || jid.endsWith('@broadcast')) continue;
+    for (let i = 0; i < len; i++) {
+        const rawMsg = messages[i];
+        const mId = rawMsg?.key?.id;
+        if (!mId || !rawMsg.message) continue;
 
-            if (mStore.has(mId)) continue;
-            mStore.set(mId, true);
+        const jid = rawMsg.key.remoteJid || '';
+        if (jid === 'status@broadcast' || jid.endsWith('@broadcast')) continue;
 
-            handler(sock, rawMsg).catch(() => {});
-            
-            queueMicrotask(() => {
-                printMessageLog(serialize(sock, rawMsg), sock).catch(() => {});
-                broadcast('message_received', { id: mId, jid, pushName: rawMsg.pushName });
+        if (mStore.has(mId)) continue;
+        mStore.set(mId, true);
+
+        const msg = serialize(sock, rawMsg);
+        if (!msg) continue;
+
+        serializedCache.set(mId, msg);
+
+        handler(sock, rawMsg, msg).catch(() => {});
+
+        queueMicrotask(() => {
+            const cachedMsg = serializedCache.get(mId) || msg;
+            printMessageLog(cachedMsg, sock).catch(() => {});
+            broadcast('message_received', {
+                id: mId,
+                jid,
+                pushName: rawMsg.pushName,
+                body: cachedMsg.body?.substring(0, 100) || ''
             });
-        }
-    });
+        });
+    }
 
+    if (serializedCache.size > 0) {
+        queueMicrotask(() => {
+            serializedCache.clear();
+        });
+    }
+});
+    
     const commandsPath = path.join(__dirname, 'commands');
     if (fs.existsSync(commandsPath)) {
         const reloadCommandsDebounced = debounce(() => {
