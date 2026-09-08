@@ -1,4 +1,5 @@
 import { UserJid } from '#simple';
+import { saveDB } from '#db';
 
 export default {
     command: ['setmeta'],
@@ -19,7 +20,7 @@ export default {
             if (q.startsWith('|') || q.startsWith('/') || q.startsWith('\\') || q.startsWith('•')) {
                 const author = q.slice(1).trim();
                 user.sAuthor = author;
-                (global as any).saveDB();
+                saveDB();
                 return await reply(`✐ Se actualizó el autor por defecto para tus stickers: *${author}*`);
             }
 
@@ -27,12 +28,12 @@ export default {
                 const parts = q.split(/[|/\\•]/);
                 user.sPack = parts[0]?.trim();
                 user.sAuthor = parts[1]?.trim();
-                (global as any).saveDB();
+                saveDB();
                 return await reply(`✐ Se actualizó el pack y autor por defecto para tus stickers.`);
             }
 
             user.sPack = q.trim();
-            (global as any).saveDB();
+            saveDB();
             return await reply(`✐ Se actualizó el pack por defecto para tus stickers: *${user.sPack}*`);
 
         } catch (e) {
