@@ -124,7 +124,8 @@ export default {
                 let term = 'Casad@';
                 if (gender === 'mujer' || gender === 'femenino') term = 'Casada';
                 else if (gender === 'hombre' || gender === 'masculino') term = 'Casado';
-                else term = 'Casade';
+                else if (gender === 'otro') term = 'Casade';
+                else term = 'Casad@';
                 statusMarry = `♡ ${term} con » *${partnerName}*\n`;
             }
 
