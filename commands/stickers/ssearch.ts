@@ -1,9 +1,7 @@
 import axios from 'axios';
 import config from '#config';
 import ffmpeg from 'fluent-ffmpeg';
-import { PassThrough } from 'stream';
-import { createWriteStream, unlinkSync } from 'fs';
-import { v4 as uuidv4 } from 'uuid';
+import { unlinkSync } from 'fs';
 
 const getBuffer = async (url: string, timeoutMs = 30000): Promise<Buffer> => {
     try {
@@ -25,8 +23,9 @@ const getBuffer = async (url: string, timeoutMs = 30000): Promise<Buffer> => {
 
 const convertToWebp = (inputBuffer: Buffer, isAnimated: boolean): Promise<Buffer> => {
     return new Promise((resolve, reject) => {
-        const inputFile = `./temp_${uuidv4()}.${isAnimated ? 'webp' : 'png'}`;
-        const outputFile = `./temp_${uuidv4()}.webp`;
+        const timestamp = Date.now();
+        const inputFile = `./temp_${timestamp}.${isAnimated ? 'webp' : 'png'}`;
+        const outputFile = `./temp_${timestamp + 1}.webp`;
         
         require('fs').writeFileSync(inputFile, inputBuffer);
         
