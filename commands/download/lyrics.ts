@@ -38,13 +38,9 @@ export default {
                 }, { quoted: m });
             }
 
-            const title = data.title || 'Sin título';
-            const artists = data.artists || 'Desconocido';
-            const album = data.album || 'Desconocido';
-            const duration = data.duration || '0:00';
             const lyrics = data.lyrics || 'Sin letra disponible';
 
-            const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Artista* » ${artists}\nׅ  ׄ  ✿ *Álbum* » ${album}\nׅ  ׄ  ✿ *Duración* » ${duration}\n\nׅ  ׄ  ✿ *Letra*\n\`\`\`${lyrics}\`\`\`\n\nׅ  ׄ  ✿ Made with love By *Ryuzei*`.trim();
+            const caption = `﹒𝜗ৎ      ࣪  *${data.title || 'Sin título'}*\n\n\`\`\`${lyrics}\`\`\`\n\nׅ  ׄ  ✿ Made with love By *Ryuzei*`.trim();
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'sending_lyrics' });
 
