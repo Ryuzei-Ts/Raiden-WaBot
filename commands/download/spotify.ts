@@ -23,6 +23,7 @@ export default {
     command: ['spotify', 'sp', 'spotifydl'],
     description: 'Descarga música de Spotify',
     category: 'download',
+    group: true,
     run: async ({ chat, m, sock, args, usedPrefix, prefix }: any) => {
         const p = usedPrefix || prefix || config.prefix || '.';
         const msgId = m?.id || m?.key?.id;
