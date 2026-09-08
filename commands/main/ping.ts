@@ -5,28 +5,30 @@ export default {
     description: 'Verifica la velocidad de respuesta del bot',
     category: 'main',
     group: true,
-    run: async ({ chat, m, sock }: any) => {
+    run: ({ chat, m, sock }: any) => {
         const start = performance.now();
 
-        const sent = await sock.sendMessage(chat, { 
-            text: '✰ Calculando...', 
-        }, { quoted: m }).catch(() => null);
-
-        if (!sent?.key) return;
-
-        const latency = (performance.now() - start).toFixed(5);
-
         sock.sendMessage(chat, { 
-            text: `✰ ¡Pong!\n> Tiempo ⴵ ${latency}ms`,
-            edit: sent.key 
-        }).catch(() => {});
-
-        queueMicrotask(() => {
-            broadcast('ping_measured', {
-                chat,
-                latency: Number(latency),
-                timestamp: Date.now()
+            text: '✰ Calculando...', 
+        }, { quoted: m }).then((sent: any) => {
+            if (!sent?.key) return;
+            
+            const rawLatency = Math.round(performance.now() - start);
+            const latency = Math.floor(rawLatency / 10) * 10;
+            
+            sock.sendMessage(chat, { 
+                text: `✰ ¡Pong!\n> Tiempo ⴵ ${latency}ms`,
+                edit: sent.key 
+            }).catch(() => {});
+            
+            queueMicrotask(() => {
+                broadcast('ping_measured', {
+                    chat,
+                    latency: Number(latency),
+                    rawLatency: Number(rawLatency),
+                    timestamp: Date.now()
+                });
             });
-        });
+        }).catch(() => {});
     }
 };
