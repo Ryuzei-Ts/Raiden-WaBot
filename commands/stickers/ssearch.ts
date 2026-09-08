@@ -90,60 +90,54 @@ export default {
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'converting_sticker' });
 
-            let webpBuffer: Buffer;
             let stickerFile: string;
 
-            try {
-                if (isAnimated) {
-                    webpBuffer = await videoToWebp(previewBuffer);
-                } else {
-                    webpBuffer = await imageToWebp(previewBuffer);
-                }
-
+            if (isAnimated) {
+                const webpBuffer = await videoToWebp(previewBuffer);
                 stickerFile = await writeExif(
                     { data: webpBuffer, mimetype: 'image/webp' },
                     { packname: stickerName, author: authorName, categories: ['🤩', '🎉'] }
                 );
-
-                // Verificar que el archivo existe
-                if (!fs.existsSync(stickerFile)) {
-                    throw new Error('El archivo de sticker no se creó correctamente');
-                }
-
-                const stickerData = await getBuffer(stickerFile);
-
-                // Limpiar archivo temporal
-                try {
-                    fs.unlinkSync(stickerFile);
-                } catch {}
-
-                global.broadcast?.('cmd_progress', { id: msgId, step: 'sending_sticker' });
-
-                const result = await sock.sendMessage(chat, { 
-                    sticker: stickerData,
-                    contextInfo: {
-                        externalAdReply: {
-                            title: stickerName,
-                            body: `By ${authorName}`,
-                            thumbnail: stickerData,
-                            sourceUrl: selectedPack.url || 'https://sticker.ly/',
-                            mediaType: 1,
-                            renderLargerThumbnail: true
-                        }
-                    }
-                }, { quoted: m });
-
-                global.broadcast?.('cmd_progress', { id: msgId, step: 'completed' });
-
-                return result;
-
-            } catch (convertError: any) {
-                console.error('Error en conversión:', convertError);
-                throw new Error(`Error al convertir sticker: ${convertError.message}`);
+            } else {
+                const webpBuffer = await imageToWebp(previewBuffer);
+                stickerFile = await writeExif(
+                    { data: webpBuffer, mimetype: 'image/webp' },
+                    { packname: stickerName, author: authorName, categories: ['🤩', '🎉'] }
+                );
             }
 
+            if (!fs.existsSync(stickerFile)) {
+                throw new Error('El archivo de sticker no se creó correctamente');
+            }
+
+            const stickerData = fs.readFileSync(stickerFile);
+
+            try {
+                fs.unlinkSync(stickerFile);
+            } catch {}
+
+            global.broadcast?.('cmd_progress', { id: msgId, step: 'sending_sticker' });
+
+            const result = await sock.sendMessage(chat, { 
+                sticker: stickerData,
+                contextInfo: {
+                    externalAdReply: {
+                        title: stickerName,
+                        body: `By ${authorName}`,
+                        thumbnail: stickerData,
+                        sourceUrl: selectedPack.url || 'https://sticker.ly/',
+                        mediaType: 1,
+                        renderLargerThumbnail: true
+                    }
+                }
+            }, { quoted: m });
+
+            global.broadcast?.('cmd_progress', { id: msgId, step: 'completed' });
+
+            return result;
+
         } catch (error: any) {
-            console.error('Error completo:', error);
+            console.error('Error:', error);
             global.broadcast?.('cmd_progress', { id: msgId, step: 'error', error: error.message || String(error) });
             
             let errorMsg = '   ׄ  ✿  Ocurrió un error al procesar tu solicitud.';
