@@ -15,10 +15,15 @@ export default {
             const q = args[0];
             const mentionedJid = m.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
             const participant = m.message?.extendedTextMessage?.contextInfo?.participant;
+            const quotedSender = m.message?.extendedTextMessage?.contextInfo?.quotedMessage?.key?.sender;
             
             let targetJid: string;
-            if (mentionedJid || participant) {
-                targetJid = mentionedJid || participant;
+            if (mentionedJid) {
+                targetJid = mentionedJid;
+            } else if (quotedSender) {
+                targetJid = quotedSender;
+            } else if (participant) {
+                targetJid = participant;
             } else if (q) {
                 const cleanNumber = q.replace(/[^0-9]/g, '');
                 targetJid = cleanNumber + '@s.whatsapp.net';
@@ -106,9 +111,9 @@ export default {
             caption += `❖ Nivel: *${level}*\n`;
             caption += `☆ Experiencia: *${xp.toLocaleString()} / ${nextLevelXp.toLocaleString()} XP*\n`;
             caption += `# Progreso: *${percent}%*\n\n`;
-            caption += `⛁ Monedas: *${coins.toLocaleString()} ${coinName}*\n`;
-            caption += `⛁ Banco: *${bank.toLocaleString()} ${coinName}*\n`;
-            caption += `❒ Harem: *${(userInChat.characters || []).length} personajes*\n`;
+            caption += `⛁ Monedas: *${coins === 0 ? '0' : coins.toLocaleString()} ${coinName}*\n`;
+            caption += `⛁ Banco: *${bank === 0 ? '0' : bank.toLocaleString()} ${coinName}*\n`;
+            caption += `❒ Harem: *${(userInChat.characters || []).length === 0 ? '0' : (userInChat.characters || []).length} personajes*\n`;
             caption += `✐ Comandos usados: *${(user.usedcommands || 0).toLocaleString()}*`;
 
             await sock.sendMessage(chat, { 
