@@ -28,7 +28,7 @@ export default {
             let targetJid: string;
             let targetNumber: string;
             
-            if (mentionedJid) {
+            if (mentionedJid && mentionedJid !== '') {
                 const resolvedMention = await UserJid(sock, chat, mentionedJid);
                 targetJid = resolvedMention;
                 targetNumber = normalizeNumber(resolvedMention);
@@ -40,10 +40,18 @@ export default {
                 const resolvedParticipant = await UserJid(sock, chat, participant);
                 targetJid = resolvedParticipant;
                 targetNumber = normalizeNumber(resolvedParticipant);
-            } else if (q) {
+            } else if (q && q.trim() !== '' && !q.startsWith('@')) {
                 const cleanNumber = q.replace(/[^0-9]/g, '');
-                targetJid = cleanNumber + '@s.whatsapp.net';
-                targetNumber = cleanNumber;
+                if (cleanNumber) {
+                    targetJid = cleanNumber + '@s.whatsapp.net';
+                    targetNumber = cleanNumber;
+                } else {
+                    targetJid = realSender;
+                    targetNumber = normalizeNumber(realSender);
+                }
+            } else if (q && q.trim() === '@') {
+                targetJid = realSender;
+                targetNumber = normalizeNumber(realSender);
             } else {
                 targetJid = realSender;
                 targetNumber = normalizeNumber(realSender);
