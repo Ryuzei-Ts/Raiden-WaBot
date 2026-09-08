@@ -70,13 +70,16 @@ export const loadDB = () => {
         );
     `);
 
+    // Migraciones para stickers
+    try { db.exec("ALTER TABLE users ADD COLUMN sPack TEXT DEFAULT ''"); } catch {}
+    try { db.exec("ALTER TABLE users ADD COLUMN sAuthor TEXT DEFAULT ''"); } catch {}
     try { db.exec("ALTER TABLE chats ADD COLUMN characters TEXT DEFAULT '{}'"); } catch {}
     try { db.exec("ALTER TABLE chats ADD COLUMN rolls TEXT DEFAULT '{}'"); } catch {}
     try { db.exec("ALTER TABLE chat_users ADD COLUMN stats TEXT DEFAULT '{}'"); } catch {}
 
     stmtSaveUser = db.prepare(`
-        INSERT INTO users (id, name, exp, level, usedcommands, description, marry, genre, birth)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO users (id, name, exp, level, usedcommands, description, marry, genre, birth, sPack, sAuthor)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
             exp = excluded.exp,
@@ -85,7 +88,9 @@ export const loadDB = () => {
             description = excluded.description,
             marry = excluded.marry,
             genre = excluded.genre,
-            birth = excluded.birth
+            birth = excluded.birth,
+            sPack = excluded.sPack,
+            sAuthor = excluded.sAuthor
     `);
 
     stmtSaveChat = db.prepare(`
@@ -178,7 +183,9 @@ export const saveDB = (chatId?: string, senderId?: string) => {
                 u.description || '',
                 u.marry || '',
                 u.genre || '',
-                u.birth || ''
+                u.birth || '',
+                u.sPack || '',
+                u.sAuthor || ''
             );
         }
 
@@ -244,6 +251,8 @@ export const registerData = async (sock: any, m: any) => {
         user.marry ??= '';
         user.genre ??= '';
         user.birth ??= '';
+        user.sPack ??= '';
+        user.sAuthor ??= '';
 
         const chat = (global as any).db.data.chats[m.chat] ||= {};
         chat.users ||= {};
