@@ -28,6 +28,8 @@ export default {
 
             let pack = '';
             let author = '';
+            let hasCustomPack = false;
+            let hasCustomAuthor = false;
 
             const fullText = args.join(' ');
 
@@ -37,17 +39,36 @@ export default {
                     const parts = fullText.split(/[|/\\•]/);
                     pack = parts[0]?.trim();
                     author = parts[1]?.trim();
+                    if (pack) hasCustomPack = true;
+                    if (author) hasCustomAuthor = true;
                 } else {
                     pack = fullText.trim();
+                    hasCustomPack = true;
                 }
             } else {
                 pack = user.sPack || '';
                 author = user.sAuthor || '';
+                if (pack) hasCustomPack = true;
+                if (author) hasCustomAuthor = true;
             }
 
             const botName = (config as any)?.botName || 'Raiden WaBot';
-            const finalPack = pack || (author ? '' : botName);
-            const finalAuthor = author || (pack ? '' : (user.sAuthor || m.pushName || 'User'));
+            let finalPack = '';
+            let finalAuthor = '';
+
+            if (hasCustomPack && hasCustomAuthor) {
+                finalPack = pack;
+                finalAuthor = author;
+            } else if (hasCustomPack && !hasCustomAuthor) {
+                finalPack = pack;
+                finalAuthor = '';
+            } else if (!hasCustomPack && hasCustomAuthor) {
+                finalPack = '';
+                finalAuthor = author;
+            } else {
+                finalPack = botName;
+                finalAuthor = m.pushName || 'User';
+            }
 
             const media = quoted ? { message: quoted } : m;
             
