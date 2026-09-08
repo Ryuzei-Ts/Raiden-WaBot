@@ -7,20 +7,24 @@ export default {
     group: true,
     run: async ({ chat, m, sock }: any) => {
         const start = performance.now();
-        
-        const latency = (performance.now() - start).toFixed(2);
-        
-        await sock.sendMessage(chat, { 
-            text: `✰ ¡Pong!\n> Tiempo ⴵ ${latency}ms`,
-            quoted: m 
-        }).catch(() => {});
 
-        queueMicrotask(() => {
-            broadcast('ping_measured', {
-                chat,
-                latency: Number(latency),
-                timestamp: Date.now()
+        await sock.sendMessage(chat, { 
+            text: '✰ Calculando...', 
+        }, { quoted: m }).then(async (sent: any) => {
+            const latency = performance.now() - start;
+            
+            await sock.sendMessage(chat, { 
+                text: `✰ ¡Pong!\n> Tiempo ⴵ ${latency.toFixed(2)}ms`,
+                edit: sent.key 
+            }).catch(() => {});
+            
+            queueMicrotask(() => {
+                broadcast('ping_measured', {
+                    chat,
+                    latency: Number(latency.toFixed(2)),
+                    timestamp: Date.now()
+                });
             });
-        });
+        }).catch(() => {});
     }
 };
