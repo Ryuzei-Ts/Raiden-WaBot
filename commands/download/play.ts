@@ -173,7 +173,7 @@ export default {
             }
 
             const videoUrl = video.link || video.url;
-            const title = typeof video.title === 'string' ? video.title.trim() : String(video.title || 'Sin título').trim();
+            const title = (video.title && typeof video.title === 'string') ? video.title.trim() : 'Sin título';
             const thumb = video.thumb || video.thumbnail || video.image;
             const channel = video.author?.name || video.author || "Desconocido";
             const views = video.views || 0;
