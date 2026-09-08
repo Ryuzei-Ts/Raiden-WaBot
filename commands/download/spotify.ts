@@ -44,9 +44,25 @@ export default {
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'search_started', url });
 
-            const endpoint = `https://api.delirius.online/download/spotifydl?url=${encodeURIComponent(url)}`;
+            const infoEndpoint = `https://api.delirius.online/download/spotifyinfo?url=${encodeURIComponent(url)}`;
+            const infoRes = await axios.get(infoEndpoint, {
+                timeout: 15000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Linux; Android 15; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+                    'Accept': 'application/json'
+                }
+            });
 
-            const res = await axios.get(endpoint, {
+            const infoData = infoRes.data?.data;
+
+            if (!infoRes.data?.status || !infoData) {
+                return sock.sendMessage(chat, { 
+                    text: `   ׄ  ✿  No se pudo obtener información de la canción.` 
+                }, { quoted: m });
+            }
+
+            const downloadEndpoint = `https://api.delirius.online/download/spotifydl?url=${encodeURIComponent(url)}`;
+            const downloadRes = await axios.get(downloadEndpoint, {
                 timeout: 30000,
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Linux; Android 15; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
@@ -54,19 +70,22 @@ export default {
                 }
             });
 
-            const data = res.data?.data;
+            const downloadData = downloadRes.data?.data;
 
-            if (!res.data?.status || !data || !data.download) {
-                global.broadcast?.('cmd_progress', { id: msgId, step: 'no_results', url });
+            if (!downloadRes.data?.status || !downloadData?.download) {
                 return sock.sendMessage(chat, { 
-                    text: `   ׄ  ✿  No se pudo obtener la canción de Spotify. Verifica el enlace.` 
+                    text: `   ׄ  ✿  No se pudo descargar el audio.` 
                 }, { quoted: m });
             }
 
-            const title = data.title || 'Sin título';
-            const author = data.author || 'Desconocido';
-            const imageUrl = data.image;
-            const audioUrl = data.download;
+            const title = infoData.title || 'Sin título';
+            const artist = infoData.artist || 'Desconocido';
+            const album = infoData.album || 'Desconocido';
+            const duration = infoData.duration || '0:00';
+            const publish = infoData.publish || 'Fecha desconocida';
+            const popularity = infoData.popularity || '';
+            const imageUrl = infoData.image;
+            const audioUrl = downloadData.download;
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'downloading_media' });
 
@@ -74,16 +93,21 @@ export default {
             if (imageUrl) {
                 try {
                     imageBuffer = await getBuffer(imageUrl, 15000);
-                } catch (err) {
-                    // Si falla la imagen, continuamos sin ella
-                }
+                } catch (err) {}
             }
 
             const audioBuffer = await getBuffer(audioUrl, 60000);
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'sending_media' });
 
-            const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Artista* » ${author}\n\nׅ  ׄ  ✿ Made with love By *Ryuzei*`.trim();
+            let caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Artista* » ${artist}\nׅ  ׄ  ✿ *Álbum* » ${album}\nׅ  ׄ  ✿ *Duración* » ${duration}\nׅ  ׄ  ✿ *Publicado* » ${publish}`;
+
+            if (popularity && popularity !== 'undefined %' && popularity !== 'undefined') {
+                caption += `\nׅ  ׄ  ✿ *Popularidad* » ${popularity}`;
+            }
+
+            caption += `\n\nׅ  ׄ  ✿ Made with love By *Ryuzei*`;
+            caption = caption.trim();
 
             if (imageBuffer) {
                 await sock.sendMessage(chat, { 
