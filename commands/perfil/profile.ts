@@ -6,12 +6,8 @@ const normalizeNumber = (x: string) => {
     if (!x) return '';
     let cleaned = String(x).split('@')[0].split(':').pop() || '';
     cleaned = cleaned.replace(/[^\d]/g, '');
-    if (cleaned.startsWith('521')) {
-        return cleaned;
-    }
-    if (cleaned.startsWith('52') && cleaned.length === 12) {
-        return cleaned;
-    }
+    if (cleaned.startsWith('521')) return cleaned;
+    if (cleaned.startsWith('52') && cleaned.length === 12) return cleaned;
     return cleaned;
 };
 
@@ -25,9 +21,7 @@ const getJidFromMention = (mention: string): string => {
         if (lastPart.includes('@')) return lastPart;
         return lastPart + '@s.whatsapp.net';
     }
-    if (/^\d+$/.test(mention)) {
-        return mention + '@s.whatsapp.net';
-    }
+    if (/^\d+$/.test(mention)) return mention + '@s.whatsapp.net';
     return mention;
 };
 
@@ -67,16 +61,18 @@ export default {
                 targetNumber = normalizeNumber(realSender);
             }
 
-            let user = (global as any).db.data.users[targetJid];
+            const usersDB = (global as any).db.data.users;
+            let user = usersDB[targetJid];
             
             if (!user || ((user.exp || 0) === 0 && (user.usedcommands || 0) === 0)) {
-                const allUsers = (global as any).db.data.users;
                 let foundUser = null;
                 let foundKey = null;
                 
-                for (const [key, value] of Object.entries(allUsers)) {
+                for (const [key, value] of Object.entries(usersDB)) {
                     const keyNumber = normalizeNumber(key);
-                    if (keyNumber === targetNumber || keyNumber === targetNumber.replace(/^52/, '521') || keyNumber === targetNumber.replace(/^521/, '52')) {
+                    if (keyNumber === targetNumber || 
+                        keyNumber === targetNumber.replace(/^52/, '521') || 
+                        keyNumber === targetNumber.replace(/^521/, '52')) {
                         foundUser = value;
                         foundKey = key;
                         break;
@@ -96,7 +92,9 @@ export default {
             if (!userInChat || Object.keys(userInChat).length === 0) {
                 for (const [key, value] of Object.entries(chatUsers)) {
                     const keyNumber = normalizeNumber(key);
-                    if (keyNumber === targetNumber || keyNumber === targetNumber.replace(/^52/, '521') || keyNumber === targetNumber.replace(/^521/, '52')) {
+                    if (keyNumber === targetNumber || 
+                        keyNumber === targetNumber.replace(/^52/, '521') || 
+                        keyNumber === targetNumber.replace(/^521/, '52')) {
                         userInChat = value;
                         break;
                     }
@@ -129,7 +127,7 @@ export default {
 
             let statusMarry = '';
             if (user.marry) {
-                const partnerName = (global as any).db.data.users[user.marry]?.name || user.marry.split('@')[0];
+                const partnerName = usersDB[user.marry]?.name || user.marry.split('@')[0];
                 const gender = (user.genre || '').toLowerCase();
                 let term = 'Casad@';
                 if (gender === 'mujer' || gender === 'femenino') term = 'Casada';
@@ -146,11 +144,12 @@ export default {
             let birthFormatted = 'Sin especificar';
             if (user.birth) {
                 const parts = user.birth.split('/');
+                const mesesNombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+                const diasSemana = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+                
                 if (parts.length === 2) {
                     const mes = parseInt(parts[0]);
                     const dia = parseInt(parts[1]);
-                    const mesesNombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-                    const diasSemana = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
                     const añoActual = new Date().getFullYear();
                     const fechaObj = new Date(añoActual, mes - 1, dia);
                     const diaSemana = diasSemana[fechaObj.getDay()];
@@ -159,8 +158,6 @@ export default {
                     const mes = parseInt(parts[0]);
                     const dia = parseInt(parts[1]);
                     const año = parts[2];
-                    const mesesNombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-                    const diasSemana = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
                     const fechaObj = new Date(parseInt(año), mes - 1, dia);
                     const diaSemana = diasSemana[fechaObj.getDay()];
                     birthFormatted = `${diaSemana}, ${dia} de ${mesesNombres[mes - 1]} de ${año}`;
