@@ -2,6 +2,7 @@ import axios from 'axios';
 import config from '#config';
 import { writeExif } from '#sticker';
 import fs from 'fs';
+import { UserJid } from '#simple';
 
 const usedPreviews = new Map<string, Set<string>>();
 
@@ -27,11 +28,14 @@ export default {
     command: ['ssearch', 'stickerly', 'stickers'],
     description: 'Busca stickers en Sticker.ly',
     category: 'stickers',
-    run: async ({ chat, m, sock, args, usedPrefix, prefix }: any) => {
+    run: async ({ chat, m, sock, args, usedPrefix, prefix, sender }: any) => {
         const p = usedPrefix || prefix || config.prefix || '.';
         const msgId = m?.id || m?.key?.id;
 
         try {
+            const realSender = await UserJid(sock, chat, sender);
+            const userName = m.pushName || 'Usuario';
+
             const query = args.join(' ').trim();
             if (!query) {
                 return sock.sendMessage(chat, { 
@@ -67,7 +71,7 @@ export default {
                 }, { quoted: m });
             }
 
-            const cacheKey = query.toLowerCase();
+            const cacheKey = `${realSender}_${query.toLowerCase()}`;
             if (!usedPreviews.has(cacheKey)) {
                 usedPreviews.set(cacheKey, new Set<string>());
             }
@@ -102,7 +106,7 @@ export default {
             }
 
             const stickerName = selectedPack.name || 'Sin nombre';
-            const authorName = selectedPack.author || 'Raiden WaBot 🍰';
+            const authorName = userName;
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'downloading_sticker' });
 
