@@ -69,6 +69,7 @@ export default {
     command: ['instagram', 'ig', 'igdl'],
     description: 'Descarga contenido de Instagram',
     category: 'download',
+    group: true,
     run: async ({ chat, m, sock, args, usedPrefix, prefix }: any) => {
         const p = usedPrefix || prefix || config.prefix || '.';
         const msgId = m?.id || m?.key?.id;
