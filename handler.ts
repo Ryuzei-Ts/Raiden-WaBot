@@ -40,6 +40,8 @@ setInterval(() => {
 
 const normalizeNumber = (x: string) => String(x || "").split("@")[0].split(":")[0].replace(/[^\d]/g, "").trim();
 
+const normalizeString = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
 function getAdminSet(participants: any[]): Set<string> {
     const adminSet = new Set<string>();
     if (!participants || !participants.length) return adminSet;
@@ -67,11 +69,9 @@ function syncCommandMapIfNeeded(): void {
         for (let i = 0; i < entries.length; i++) {
             const plugin: any = entries[i];
             if (!plugin?.command) continue;
-
             if (plugin.eval || plugin.exec || plugin.require || plugin.fs) {
                 continue;
             }
-
             const execFn = plugin.run || plugin.default || (typeof plugin === 'function' ? plugin : null);
             if (!execFn) continue;
             plugin._exec = execFn;
@@ -142,11 +142,14 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
     if (msg.body.charCodeAt(0) !== prefix.charCodeAt(0)) return;
 
     const spaceIndex = msg.body.indexOf(' ');
-    const commandName = (spaceIndex === -1 ? msg.body.slice(prefix.length) : msg.body.slice(prefix.length, spaceIndex)).toLowerCase();
+    const commandName = (spaceIndex === -1 ? msg.body.slice(prefix.length) : msg.body.slice(prefix.length, spaceIndex));
     if (!commandName) return;
 
+    const normalizedCommandName = normalizeString(commandName);
+    if (!normalizedCommandName) return;
+
     syncCommandMapIfNeeded();
-    const cmd = commandMap.get(commandName);
+    const cmd = commandMap.get(normalizedCommandName);
     if (!cmd) return;
 
     const chat = msg.chat || msg.from || rawMsg?.key?.remoteJid;
