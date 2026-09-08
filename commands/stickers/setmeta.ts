@@ -4,6 +4,7 @@ import { saveDB } from '#db';
 export default {
     command: ['setmeta'],
     category: 'stickers',
+    group: true,
     run: async ({ chat, m, sock, args, usedPrefix, prefix, sender }: any) => {
         const reply = (txt: string) => sock.sendMessage(chat, { text: txt }, { quoted: m });
 
@@ -20,8 +21,8 @@ export default {
             if (q.startsWith('|') || q.startsWith('/') || q.startsWith('\\') || q.startsWith('•')) {
                 const author = q.slice(1).trim();
                 if (author) {
-                    user.sAuthor = author;
                     user.sPack = '';
+                    user.sAuthor = author;
                     saveDB();
                     return await reply(`✐ Se actualizó el autor por defecto para tus stickers: *${author}*`);
                 }
