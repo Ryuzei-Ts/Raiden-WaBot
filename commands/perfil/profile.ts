@@ -2,7 +2,34 @@ import { UserJid } from '#simple';
 import config from '#config';
 import { saveDB } from '#db';
 
-const normalizeNumber = (x: string) => String(x || "").split("@")[0].split(":")[0].replace(/[^\d]/g, "").trim();
+const normalizeNumber = (x: string) => {
+    if (!x) return '';
+    let cleaned = String(x).split('@')[0].split(':').pop() || '';
+    cleaned = cleaned.replace(/[^\d]/g, '');
+    if (cleaned.startsWith('521')) {
+        return cleaned;
+    }
+    if (cleaned.startsWith('52') && cleaned.length === 12) {
+        return cleaned;
+    }
+    return cleaned;
+};
+
+const getJidFromMention = (mention: string): string => {
+    if (!mention) return '';
+    if (mention.includes('@s.whatsapp.net')) return mention;
+    if (mention.includes('@c.us')) return mention.replace('@c.us', '@s.whatsapp.net');
+    if (mention.includes('lid:')) {
+        const parts = mention.split(':');
+        const lastPart = parts[parts.length - 1];
+        if (lastPart.includes('@')) return lastPart;
+        return lastPart + '@s.whatsapp.net';
+    }
+    if (/^\d+$/.test(mention)) {
+        return mention + '@s.whatsapp.net';
+    }
+    return mention;
+};
 
 export default {
     command: ['perfil', 'profile', 'user'],
@@ -15,21 +42,22 @@ export default {
         try {
             const realSender = await UserJid(sock, chat, sender);
             const q = args[0];
-            const mentionedJid = m.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
-            const participant = m.message?.extendedTextMessage?.contextInfo?.participant;
-            const quotedSender = m.message?.extendedTextMessage?.contextInfo?.quotedMessage?.key?.sender;
+            
+            let mentionedJid = m.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
+            let participant = m.message?.extendedTextMessage?.contextInfo?.participant;
+            let quotedSender = m.message?.extendedTextMessage?.contextInfo?.quotedMessage?.key?.sender;
             
             let targetJid: string;
             let targetNumber: string;
             
             if (mentionedJid) {
-                targetJid = mentionedJid;
+                targetJid = getJidFromMention(mentionedJid);
                 targetNumber = normalizeNumber(mentionedJid);
             } else if (quotedSender) {
-                targetJid = quotedSender;
+                targetJid = getJidFromMention(quotedSender);
                 targetNumber = normalizeNumber(quotedSender);
             } else if (participant) {
-                targetJid = participant;
+                targetJid = getJidFromMention(participant);
                 targetNumber = normalizeNumber(participant);
             } else if (q) {
                 targetNumber = q.replace(/[^0-9]/g, '');
@@ -39,19 +67,25 @@ export default {
                 targetNumber = normalizeNumber(realSender);
             }
 
-            // Buscar usuario por número normalizado en la base de datos
             let user = (global as any).db.data.users[targetJid];
             
-            // Si no se encuentra por JID exacto, buscar por número normalizado
-            if (!user) {
+            if (!user || ((user.exp || 0) === 0 && (user.usedcommands || 0) === 0)) {
                 const allUsers = (global as any).db.data.users;
+                let foundUser = null;
+                let foundKey = null;
+                
                 for (const [key, value] of Object.entries(allUsers)) {
                     const keyNumber = normalizeNumber(key);
-                    if (keyNumber === targetNumber) {
-                        user = value;
-                        targetJid = key;
+                    if (keyNumber === targetNumber || keyNumber === targetNumber.replace(/^52/, '521') || keyNumber === targetNumber.replace(/^521/, '52')) {
+                        foundUser = value;
+                        foundKey = key;
                         break;
                     }
+                }
+                
+                if (foundUser) {
+                    user = foundUser;
+                    targetJid = foundKey;
                 }
             }
             
@@ -59,11 +93,10 @@ export default {
             const chatUsers = chatData.users || {};
             let userInChat = chatUsers[targetJid] || {};
             
-            // Si no se encuentra en chat_users por JID, buscar por número normalizado
             if (!userInChat || Object.keys(userInChat).length === 0) {
                 for (const [key, value] of Object.entries(chatUsers)) {
                     const keyNumber = normalizeNumber(key);
-                    if (keyNumber === targetNumber) {
+                    if (keyNumber === targetNumber || keyNumber === targetNumber.replace(/^52/, '521') || keyNumber === targetNumber.replace(/^521/, '52')) {
                         userInChat = value;
                         break;
                     }
