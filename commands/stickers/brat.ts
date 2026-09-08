@@ -32,7 +32,10 @@ export default {
             const user = global.db.data.users[realSender] || {};
             const isVideo = m.message?.text?.includes('.bratv') || command === 'bratv';
             const endpoint = isVideo ? `https://api.delirius.online/canvas/bratvideo?text=${encodeURIComponent(query)}` : `https://api.delirius.online/canvas/brat?text=${encodeURIComponent(query)}`;
-            const mediaBuffer = await getBuffer(endpoint, 30000);
+            const response = await fetch(endpoint);
+            if (!response.ok) return sendReply(`✿ Error al generar el ${isVideo ? 'video' : 'imagen'} BRAT.`);
+            const arrayBuffer = await response.arrayBuffer();
+            const mediaBuffer = Buffer.from(arrayBuffer);
             if (!mediaBuffer) return sendReply(`✿ Error al generar el ${isVideo ? 'video' : 'imagen'} BRAT.`);
             let pack = '', author = '', hasCustomPack = false, hasCustomAuthor = false;
             const fullText = args.join(' ');
@@ -69,7 +72,7 @@ export default {
                 finalPack = botName;
                 finalAuthor = m.pushName || 'User';
             }
-            const resultPath = await writeExif({ data: mediaBuffer, mimetype: isVideo ? 'video/mp4' : 'image/png' }, { packname: finalPack, author: finalAuthor });
+            const resultPath = await writeExif({ data: mediaBuffer, mimetype: isVideo ? 'video/mp4' : 'image/jpeg' }, { packname: finalPack, author: finalAuthor });
             if (resultPath && fs.existsSync(resultPath)) {
                 const stickerData = fs.readFileSync(resultPath);
                 await sock.sendMessage(chat, { sticker: stickerData }, { quoted: m });
