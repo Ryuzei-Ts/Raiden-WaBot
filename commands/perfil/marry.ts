@@ -22,7 +22,8 @@ export default {
                 let status = 'casad@';
                 if (gender === 'mujer' || gender === 'femenino') status = 'casada';
                 else if (gender === 'hombre' || gender === 'masculino') status = 'casado';
-                else status = 'casade';
+                else if (gender === 'otro') status = 'casade';
+                else status = 'casad@';
                 return reply(`✿ Ya estás ${status} con *${partnerName}*\n> Puedes divorciarte con: *${usedPrefix}divorce*`);
             }
 
@@ -94,11 +95,13 @@ export default {
                 let label1 = 'Espos@';
                 if (gen1 === 'mujer' || gen1 === 'femenino') label1 = 'Esposa';
                 else if (gen1 === 'hombre' || gen1 === 'masculino') label1 = 'Esposo';
+                else if (gen1 === 'otro') label1 = 'Espose';
                 else label1 = 'Espos@';
 
                 let label2 = 'Espos@';
                 if (gen2 === 'mujer' || gen2 === 'femenino') label2 = 'Esposa';
                 else if (gen2 === 'hombre' || gen2 === 'masculino') label2 = 'Esposo';
+                else if (gen2 === 'otro') label2 = 'Espose';
                 else label2 = 'Espos@';
 
                 const weddingMsg = `✩.･:｡≻───── ⋆♡⋆ ─────.•:｡✩\n¡Se han Casado! ฅ^•ﻌ•^ฅ*:･ﾟ✧\n\n*•.¸♡ ${label1} @${targetJid.split('@')[0]} ♡¸.•*\n*•.¸♡ ${label2} @${realSender.split('@')[0]} ♡¸.•*\n\n\`Disfruten de su luna de miel\`\n✩.･:｡≻───── ⋆♡⋆ ─────.•:｡✩`;
