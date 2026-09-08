@@ -11,7 +11,7 @@ export default {
             const realSender = await UserJid(sock, chat, sender);
             const user = (global as any).db.data.users[realSender] || {};
 
-            const q = args.join(' ');
+            const q = args.join(' ').trim();
 
             if (!q) {
                 return await reply(`✿ Formatos válidos:\n> *${usedPrefix}setmeta | Autor*\n> *${usedPrefix}setmeta Pack*\n> *${usedPrefix}setmeta Pack | Autor*`);
@@ -19,20 +19,44 @@ export default {
 
             if (q.startsWith('|') || q.startsWith('/') || q.startsWith('\\') || q.startsWith('•')) {
                 const author = q.slice(1).trim();
-                user.sAuthor = author;
-                saveDB();
-                return await reply(`✐ Se actualizó el autor por defecto para tus stickers: *${author}*`);
+                if (author) {
+                    user.sAuthor = author;
+                    user.sPack = '';
+                    saveDB();
+                    return await reply(`✐ Se actualizó el autor por defecto para tus stickers: *${author}*`);
+                }
+                return await reply(`✿ Debes escribir un autor.`);
             }
 
             if (q.includes('|') || q.includes('/') || q.includes('\\') || q.includes('•')) {
-                const parts = q.split(/[|/\\•]/);
-                user.sPack = parts[0]?.trim();
-                user.sAuthor = parts[1]?.trim();
+                const parts = q.split(/[|/\\•]/).map(p => p.trim());
+                const pack = parts[0] || '';
+                const author = parts[1] || '';
+                
+                if (pack && author) {
+                    user.sPack = pack;
+                    user.sAuthor = author;
+                } else if (pack && !author) {
+                    user.sPack = pack;
+                    user.sAuthor = '';
+                } else if (!pack && author) {
+                    user.sPack = '';
+                    user.sAuthor = author;
+                }
+                
                 saveDB();
-                return await reply(`✐ Se actualizó el pack y autor por defecto para tus stickers.`);
+                
+                if (pack && author) {
+                    return await reply(`✐ Se actualizó el pack y autor por defecto para tus stickers.\n✿ Pack: *${pack}*\n✿ Autor: *${author}*`);
+                } else if (pack) {
+                    return await reply(`✐ Se actualizó el pack por defecto para tus stickers: *${pack}*`);
+                } else if (author) {
+                    return await reply(`✐ Se actualizó el autor por defecto para tus stickers: *${author}*`);
+                }
             }
 
-            user.sPack = q.trim();
+            user.sPack = q;
+            user.sAuthor = '';
             saveDB();
             return await reply(`✐ Se actualizó el pack por defecto para tus stickers: *${user.sPack}*`);
 
