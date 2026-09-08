@@ -3,7 +3,9 @@ import { saveDB } from '#db';
 
 export default {
     command: ['delmeta'],
+    description: 'Elimina los metadatos guardados de stickers',
     category: 'stickers',
+    group: true,
     run: async ({ chat, m, sock, args, usedPrefix, prefix, sender }: any) => {
         const reply = (txt: string) => sock.sendMessage(chat, { text: txt }, { quoted: m });
 
@@ -18,7 +20,7 @@ export default {
             user.sPack = '';
             user.sAuthor = '';
             saveDB();
-            return await reply(`✐ Se eliminaron todos los metadatos (pack y autor).`);
+            return await reply(`✐ Se eliminaron todos los metadatos.`);
 
         } catch (e) {
             console.error('Error en delmeta:', e);
