@@ -1,7 +1,6 @@
 import axios from 'axios';
 import config from '#config';
-import ffmpeg from 'fluent-ffmpeg';
-import { unlinkSync } from 'fs';
+import { imageToWebp, videoToWebp, writeExif } from '#sticker';
 
 const getBuffer = async (url: string, timeoutMs = 30000): Promise<Buffer> => {
     try {
@@ -21,51 +20,8 @@ const getBuffer = async (url: string, timeoutMs = 30000): Promise<Buffer> => {
     }
 };
 
-const convertToWebp = (inputBuffer: Buffer, isAnimated: boolean): Promise<Buffer> => {
-    return new Promise((resolve, reject) => {
-        const timestamp = Date.now();
-        const inputFile = `./temp_${timestamp}.${isAnimated ? 'webp' : 'png'}`;
-        const outputFile = `./temp_${timestamp + 1}.webp`;
-        
-        require('fs').writeFileSync(inputFile, inputBuffer);
-        
-        const command = ffmpeg(inputFile);
-        
-        if (isAnimated) {
-            command
-                .inputOptions(['-vcodec', 'libwebp', '-lossless', '0', '-preset', 'default', '-loop', '0'])
-                .outputOptions(['-vf', 'scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2', '-vsync', '0'])
-                .fps(15);
-        } else {
-            command
-                .inputOptions(['-vcodec', 'libwebp', '-lossless', '0', '-preset', 'default'])
-                .outputOptions(['-vf', 'scale=512:512:force_original_aspect_ratio=decrease,pad=512:512:(ow-iw)/2:(oh-ih)/2']);
-        }
-        
-        command
-            .output(outputFile)
-            .on('end', () => {
-                try {
-                    const resultBuffer = require('fs').readFileSync(outputFile);
-                    unlinkSync(inputFile);
-                    unlinkSync(outputFile);
-                    resolve(resultBuffer);
-                } catch (err) {
-                    reject(err);
-                }
-            })
-            .on('error', (err) => {
-                try {
-                    unlinkSync(inputFile);
-                } catch {}
-                reject(err);
-            })
-            .run();
-    });
-};
-
 export default {
-    command: ['ssearch', 'stickerly'],
+    command: ['ssearch', 'stickerly', 'stickers'],
     description: 'Busca stickers en Sticker.ly',
     category: 'download',
     run: async ({ chat, m, sock, args, usedPrefix, prefix }: any) => {
@@ -76,7 +32,7 @@ export default {
             const query = args.join(' ').trim();
             if (!query) {
                 return sock.sendMessage(chat, { 
-                    text: `   ׄ  ✿  ¿Qué sticker deseas buscar?\n\n✿ *Ejemplo:* ${p}ssearch my melody` 
+                    text: `   ׄ  ✿  ¿Qué sticker deseas buscar?\n\n✿ *Ejemplo:* ${p}stickers my melody` 
                 }, { quoted: m });
             }
 
@@ -125,25 +81,39 @@ export default {
 
             const stickerName = selectedPack.name || 'Sin nombre';
             const authorName = 'Raiden WaBot 🍰';
+            const isAnimated = selectedPack.isAnimated || false;
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'downloading_sticker' });
 
             const previewBuffer = await getBuffer(selectedPack.preview, 15000);
-            const isAnimated = selectedPack.isAnimated || false;
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'converting_sticker' });
 
-            const webpBuffer = await convertToWebp(previewBuffer, isAnimated);
+            let webpBuffer: Buffer;
+            let stickerFile: string;
+
+            if (isAnimated) {
+                webpBuffer = await videoToWebp(previewBuffer);
+            } else {
+                webpBuffer = await imageToWebp(previewBuffer);
+            }
+
+            stickerFile = await writeExif(
+                { data: webpBuffer, mimetype: 'image/webp' },
+                { packname: stickerName, author: authorName, categories: ['🤩', '🎉'] }
+            );
+
+            const stickerData = await getBuffer(stickerFile);
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'sending_sticker' });
 
             const result = await sock.sendMessage(chat, { 
-                sticker: webpBuffer,
+                sticker: stickerData,
                 contextInfo: {
                     externalAdReply: {
                         title: stickerName,
                         body: `By ${authorName}`,
-                        thumbnail: webpBuffer,
+                        thumbnail: stickerData,
                         sourceUrl: selectedPack.url || 'https://sticker.ly/',
                         mediaType: 1,
                         renderLargerThumbnail: true
