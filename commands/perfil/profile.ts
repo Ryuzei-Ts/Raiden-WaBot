@@ -1,5 +1,6 @@
 import { UserJid } from '#simple';
 import config from '#config';
+import { saveDB } from '#db';
 
 export default {
     command: ['perfil', 'profile', 'user'],
@@ -44,14 +45,14 @@ export default {
                 user.level = level;
                 nextLevelXp = level * 500;
                 percent = Math.min(Math.floor((xp / nextLevelXp) * 100), 100);
-                (global as any).saveDB();
+                saveDB(chat, targetJid);
             }
             
             let imgUrl: string;
             try {
                 imgUrl = await sock.profilePictureUrl(targetJid, 'image');
             } catch {
-                imgUrl = 'https://cdn.nexylight.xyz/files/cv46xgk.jpeg';
+                imgUrl = 'https://cdn.ryuzei.xyz/files/cv46xgk.jpeg';
             }
 
             let statusMarry = '';
