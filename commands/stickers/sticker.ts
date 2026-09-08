@@ -7,7 +7,9 @@ import config from '#config';
 
 export default {
     command: ['s', 'sticker', 'stiker', 'wm'],
+    description: 'Crea stickers desde imágenes, videos o stickers',
     category: 'stickers',
+    group: true,
     run: async ({ chat, m, sock, args, usedPrefix, prefix, sender }: any) => {
         const sendReply = (txt: string) => sock.sendMessage(chat, { text: txt }, { quoted: m });
 
