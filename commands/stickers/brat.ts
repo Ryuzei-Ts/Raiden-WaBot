@@ -23,14 +23,14 @@ export default {
     description: 'Genera stickers con estilo BRAT',
     category: 'stickers',
     group: true,
-    run: async ({ chat, m, sock, args, usedPrefix, prefix, sender }: any) => {
+    run: async ({ chat, m, sock, args, usedPrefix, prefix, sender, command }: any) => {
         const sendReply = (txt: string) => sock.sendMessage(chat, { text: txt }, { quoted: m });
         try {
             const query = args.join(' ').trim();
             if (!query) return sendReply(`✿ ¿Qué texto deseas poner?\n\n✿ *Ejemplo:* ${usedPrefix}brat Hola mundo`);
             const realSender = await UserJid(sock, chat, sender);
             const user = global.db.data.users[realSender] || {};
-            const isVideo = m.message?.text?.includes('.bratv') || command === 'bratv';
+            const isVideo = command === 'bratv';
             const endpoint = isVideo ? `https://api.delirius.online/canvas/bratvideo?text=${encodeURIComponent(query)}` : `https://api.delirius.online/canvas/brat?text=${encodeURIComponent(query)}`;
             const response = await fetch(endpoint);
             if (!response.ok) return sendReply(`✿ Error al generar el ${isVideo ? 'video' : 'imagen'} BRAT.`);
