@@ -2,7 +2,7 @@ import { UserJid } from '#simple';
 import { saveDB } from '#db';
 
 export default {
-    command: ['setdesc', 'setdescription', 'setbiografia'],
+    command: ['setdesc', 'setbio', 'setdescription'],
     description: 'Establece o elimina tu descripción de perfil',
     category: 'profile',
     group: true,
