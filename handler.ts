@@ -26,7 +26,6 @@ const processedMsgIds = new LRUCache<string, boolean>({
 const userRateLimits = new Map<string, { count: number; resetTime: number }>();
 const commandMap = new Map<string, any>();
 let lastPluginsRef: any = null;
-const executionTimes = new Map<string, number[]>();
 
 export function invalidateGroupCache(chatId: string): void {
     if (chatId) groupMetaCache.delete(chatId);
@@ -128,19 +127,6 @@ function logHandlerError(e: any): void {
             });
         });
     }
-}
-
-function updateExecutionTime(command: string, time: number): void {
-    const times = executionTimes.get(command) || [];
-    times.push(time);
-    if (times.length > 100) times.shift();
-    executionTimes.set(command, times);
-}
-
-function getAverageTime(command: string): number {
-    const times = executionTimes.get(command);
-    if (!times || !times.length) return 0;
-    return times.reduce((a, b) => a + b, 0) / times.length;
 }
 
 export const handler = async (sock: any, rawMsg: any): Promise<any> => {
@@ -290,10 +276,6 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
                 if (!dbData.users) dbData.users = {};
                 if (!dbData.users[cleanSender]) dbData.users[cleanSender] = {};
                 const userDb = dbData.users[cleanSender];
-                
-                if (!userDb.commands) userDb.commands = {};
-                userDb.commands[rawCommand] = (userDb.commands[rawCommand] || 0) + 1;
-                
                 userDb.usedcommands = (userDb.usedcommands || 0) + 1;
                 userDb.exp = (userDb.exp || 0) + Math.floor(Math.random() * 10) + 5;
                 if (isGroup && dbData.chats?.[chat]?.users?.[cleanSender]) {
@@ -304,8 +286,7 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
                     chat,
                     user: cleanSender,
                     exp: userDb.exp,
-                    usedcommands: userDb.usedcommands,
-                    command: rawCommand
+                    usedcommands: userDb.usedcommands
                 });
             });
         }
@@ -320,17 +301,13 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
 
         try {
             const result = await cmd._exec(ctx);
-            const executionTime = Date.now() - startTime;
-            
-            updateExecutionTime(rawCommand, executionTime);
             
             queueMicrotask(() => {
                 broadcast('command_executed', {
                     command: rawCommand,
                     chat,
                     sender: cleanSender,
-                    executionTimeMs: executionTime,
-                    averageTime: getAverageTime(rawCommand)
+                    executionTimeMs: Date.now() - startTime
                 });
             });
 
