@@ -8,7 +8,7 @@ export default {
 
         try {
             const realSender = await UserJid(sock, chat, sender);
-            const user = global.db.data.users[realSender] || {};
+            const user = (global as any).db.data.users[realSender] || {};
 
             const q = args.join(' ');
 
