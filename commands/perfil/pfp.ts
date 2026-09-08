@@ -29,10 +29,10 @@ export default {
                 if (cleanNumber) {
                     targetJid = cleanNumber + '@s.whatsapp.net';
                 } else {
-                    targetJid = realSender;
+                    return reply(`「 ꕤ 」 Por favor, menciona al usuario cuya foto de perfil quieres ver.`);
                 }
             } else {
-                targetJid = realSender;
+                return reply(`「 ꕤ 」 Por favor, menciona al usuario cuya foto de perfil quieres ver.`);
             }
 
             let imgUrl: string;
