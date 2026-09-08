@@ -5,7 +5,7 @@ import fs from 'fs';
 
 const usedPreviews = new Map<string, Set<string>>();
 
-const getBuffer = async (url: string, timeoutMs = 15000): Promise<Buffer> => {
+const getBuffer = async (url: string, timeoutMs = 20000): Promise<Buffer> => {
     try {
         const res = await axios.get(url, {
             responseType: 'arraybuffer',
@@ -43,17 +43,24 @@ export default {
 
             const endpoint = `https://api.delirius.online/search/stickerly?query=${encodeURIComponent(query)}`;
 
-            const res = await axios.get(endpoint, {
-                timeout: 4000,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Linux; Android 15; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-                    'Accept': 'application/json'
-                }
-            });
+            let data;
+            try {
+                const res = await axios.get(endpoint, {
+                    timeout: 10000,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Linux; Android 15; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+                        'Accept': 'application/json'
+                    }
+                });
+                data = res.data?.data;
+            } catch (err: any) {
+                console.error('Error en API:', err.message);
+                return sock.sendMessage(chat, { 
+                    text: `   ׄ  ✿  No se pudo conectar con el servidor. Intenta de nuevo.` 
+                }, { quoted: m });
+            }
 
-            const data = res.data?.data;
-
-            if (!res.data?.status || !data || !Array.isArray(data) || data.length === 0) {
+            if (!data || !Array.isArray(data) || data.length === 0) {
                 global.broadcast?.('cmd_progress', { id: msgId, step: 'no_results', query });
                 return sock.sendMessage(chat, { 
                     text: `   ׄ  ✿  No se encontraron stickers para *${query}*.` 
@@ -99,7 +106,16 @@ export default {
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'downloading_sticker' });
 
-            const previewBuffer = await getBuffer(selectedPack.preview, 15000);
+            let previewBuffer;
+            try {
+                previewBuffer = await getBuffer(selectedPack.preview, 15000);
+            } catch (err: any) {
+                console.error('Error descargando preview:', err.message);
+                usedSet.delete(selectedPack.preview);
+                return sock.sendMessage(chat, { 
+                    text: `   ׄ  ✿  Error al descargar el sticker. Intenta de nuevo.` 
+                }, { quoted: m });
+            }
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'converting_sticker' });
 
@@ -111,11 +127,15 @@ export default {
                 );
             } catch (convertError: any) {
                 console.error('Error en conversión:', convertError);
-                throw new Error(`Error al convertir: ${convertError.message}`);
+                return sock.sendMessage(chat, { 
+                    text: `   ׄ  ✿  Error al convertir el sticker. Intenta de nuevo.` 
+                }, { quoted: m });
             }
 
             if (!fs.existsSync(stickerFile)) {
-                throw new Error('El archivo de sticker no se creó correctamente');
+                return sock.sendMessage(chat, { 
+                    text: `   ׄ  ✿  Error al crear el sticker. Intenta de nuevo.` 
+                }, { quoted: m });
             }
 
             const stickerData = fs.readFileSync(stickerFile);
