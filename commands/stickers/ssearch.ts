@@ -3,7 +3,9 @@ import config from '#config';
 import { writeExif } from '#sticker';
 import fs from 'fs';
 
-const getBuffer = async (url: string, timeoutMs = 30000): Promise<Buffer> => {
+const usedPreviews = new Map<string, Set<string>>();
+
+const getBuffer = async (url: string, timeoutMs = 15000): Promise<Buffer> => {
     try {
         const res = await axios.get(url, {
             responseType: 'arraybuffer',
@@ -42,7 +44,7 @@ export default {
             const endpoint = `https://api.delirius.online/search/stickerly?query=${encodeURIComponent(query)}`;
 
             const res = await axios.get(endpoint, {
-                timeout: 15000,
+                timeout: 4000,
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Linux; Android 15; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
                     'Accept': 'application/json'
@@ -58,26 +60,38 @@ export default {
                 }, { quoted: m });
             }
 
-            const usedIndexes = new Set<number>();
-            let selectedPack: any = null;
-            let attempts = 0;
-            const maxAttempts = Math.min(data.length, 5);
+            const cacheKey = query.toLowerCase();
+            if (!usedPreviews.has(cacheKey)) {
+                usedPreviews.set(cacheKey, new Set<string>());
+            }
+            const usedSet = usedPreviews.get(cacheKey)!;
 
-            while (attempts < maxAttempts) {
-                const randomIndex = Math.floor(Math.random() * data.length);
-                if (!usedIndexes.has(randomIndex)) {
-                    usedIndexes.add(randomIndex);
-                    const pack = data[randomIndex];
-                    if (pack?.preview && !pack.isAnimated) {
-                        selectedPack = pack;
-                        break;
-                    }
+            let selectedPack: any = null;
+            let index = 0;
+
+            while (index < data.length) {
+                const pack = data[index];
+                if (pack?.preview && !pack.isAnimated && !usedSet.has(pack.preview)) {
+                    selectedPack = pack;
+                    usedSet.add(pack.preview);
+                    break;
                 }
-                attempts++;
+                index++;
             }
 
             if (!selectedPack) {
-                selectedPack = data.find((pack: any) => pack?.preview && !pack.isAnimated) || data.find((pack: any) => pack?.preview) || data[0];
+                usedSet.clear();
+                const fallbackPack = data.find((pack: any) => pack?.preview && !pack.isAnimated) || data.find((pack: any) => pack?.preview) || data[0];
+                if (fallbackPack) {
+                    selectedPack = fallbackPack;
+                    usedSet.add(fallbackPack.preview);
+                }
+            }
+
+            if (!selectedPack) {
+                return sock.sendMessage(chat, { 
+                    text: `   ׄ  ✿  No se encontraron stickers disponibles para *${query}*.` 
+                }, { quoted: m });
             }
 
             const stickerName = selectedPack.name || 'Sin nombre';
@@ -124,17 +138,8 @@ export default {
             console.error('Error completo:', error);
             global.broadcast?.('cmd_progress', { id: msgId, step: 'error', error: error.message || String(error) });
             
-            let errorMsg = '   ׄ  ✿  Ocurrió un error al procesar tu solicitud.';
-            if (error.message?.includes('timeout') || error.code === 'ECONNABORTED') {
-                errorMsg = '   ׄ  ✿  El servidor tardó demasiado en responder. Intenta de nuevo.';
-            } else if (error.response?.status === 429) {
-                errorMsg = '   ׄ  ✿  Demasiadas solicitudes. Espera un momento e intenta de nuevo.';
-            } else if (error.message?.includes('ffmpeg') || error.message?.includes('libwebp')) {
-                errorMsg = '   ׄ  ✿  Error al procesar el sticker. Intenta de nuevo en unos segundos.';
-            }
-            
             return sock.sendMessage(chat, { 
-                text: errorMsg
+                text: `   ׄ  ✿  Ocurrió un error al procesar tu solicitud.`
             }, { quoted: m });
         }
     }
