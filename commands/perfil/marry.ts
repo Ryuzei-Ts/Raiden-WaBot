@@ -61,8 +61,30 @@ export default {
             }
 
             if (sock.marry[targetJid] === realSender) {
+                const fechaActual = new Date();
+                const fechaStr = fechaActual.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+                const fechaCompleta = fechaActual.toLocaleString('es-ES', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+                if (!user.marryHistory) user.marryHistory = [];
+                if (!targetUser.marryHistory) targetUser.marryHistory = [];
+
+                user.marryHistory.push({
+                    partner: targetJid,
+                    inicio: fechaCompleta,
+                    fin: 'presente',
+                    fecha: fechaStr
+                });
+
+                targetUser.marryHistory.push({
+                    partner: realSender,
+                    inicio: fechaCompleta,
+                    fin: 'presente',
+                    fecha: fechaStr
+                });
+
                 user.marry = targetJid;
                 targetUser.marry = realSender;
+                
                 saveDB(chat, realSender);
                 saveDB(chat, targetJid);
 
