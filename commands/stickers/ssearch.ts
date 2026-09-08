@@ -77,7 +77,7 @@ export default {
             const query = args.join(' ').trim();
             if (!query) {
                 return sock.sendMessage(chat, { 
-                    text: `   ׄ  ✿  Por favor, ingresa un término de búsqueda.` 
+                    text: `   ׄ  ✿  ¿Qué sticker deseas buscar?\n\n✿ *Ejemplo:* ${p}ssearch my melody` 
                 }, { quoted: m });
             }
 
