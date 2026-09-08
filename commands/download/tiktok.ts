@@ -23,6 +23,7 @@ export default {
     command: ['tiktok', 'tt', 'tk'],
     description: 'Descarga videos de TikTok',
     category: 'download',
+    group: true,
     run: async ({ chat, m, sock, args, usedPrefix, prefix }: any) => {
         const p = usedPrefix || prefix || config.prefix || '.';
         const msgId = m?.id || m?.key?.id;
