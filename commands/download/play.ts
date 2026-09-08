@@ -1,31 +1,29 @@
 import yts from 'yt-search';
 import { spawn } from 'child_process';
-import { LRUCache } from 'lru-cache';
 import axios from 'axios';
 import config from '#config';
 
-const cache = new LRUCache<string, any>({ max: 100, ttl: 3600000 });
-const downloadCache = new LRUCache<string, { url: string; isVideo: boolean }>({ max: 50, ttl: 120000 });
 const LEMPI_KEYS = ['lem488', 'Midnight1', 'Midnight', 'lem691', 'lem678', 'lem957', 'lem293', 'lem144', 'lem459', 'lem501', 'lem141'];
 const STELLAR_KEY = 'Midnight';
 
 const MAX_DURATION_SECONDS = 7 * 60;
 const MAX_FILE_SIZE_BYTES = 30 * 1024 * 1024;
 
-const safeString = (value: any, fallback: string = ''): string => {
-    if (value === null || value === undefined) return fallback;
-    if (typeof value === 'string') return value;
-    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-    if (typeof value === 'object') {
-        try { return JSON.stringify(value); } catch { return fallback; }
+const cleanText = (text: any): string => {
+    if (text === null || text === undefined) return '';
+    if (typeof text === 'string') return text.replace(/^\s+|\s+$/g, '');
+    if (typeof text === 'number') return String(text);
+    if (typeof text === 'object') {
+        try { return JSON.stringify(text).replace(/^\s+|\s+$/g, ''); } 
+        catch { return ''; }
     }
-    return fallback;
+    return String(text).replace(/^\s+|\s+$/g, '');
 };
 
 const formatViews = (v: number) => 
     v >= 1e9 ? (v / 1e9).toFixed(1) + 'B' : 
     v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : 
-    v >= 1e3 ? (v / 1e3).toFixed(1) + 'K' : v.toString();
+    v >= 1e3 ? (v / 1e3).toFixed(1) + 'K' : String(v);
 
 const emitProgress = (msgId: string, step: string, extraData: Record<string, any> = {}) => {
     queueMicrotask(() => {
@@ -96,10 +94,6 @@ const fetchWithTimeout = async (url: string, timeoutMs = 15000): Promise<any> =>
 };
 
 const getDownloadStreamSequential = async (link: string, msgId?: string): Promise<{ url: string; isVideo: boolean }> => {
-    const cacheKey = link.toLowerCase();
-    const cached = downloadCache.get(cacheKey);
-    if (cached) return cached;
-
     const encoded = encodeURIComponent(link);
     let lastError = '';
     
@@ -117,9 +111,7 @@ const getDownloadStreamSequential = async (link: string, msgId?: string): Promis
         try {
             const data = await fetchWithTimeout(api.url);
             const dlUrl = extractDownloadUrl(data);
-            const result = { url: dlUrl, isVideo: api.isVideo };
-            downloadCache.set(cacheKey, result);
-            return result;
+            return { url: dlUrl, isVideo: api.isVideo };
         } catch (err: any) {
             lastError = err.message || String(err);
         }
@@ -138,7 +130,7 @@ export default {
         const msgId = msg?.id || msg?.key?.id;
 
         try {
-            const query = args.join(" ").trim();
+            const query = args.join(" ").replace(/^\s+|\s+$/g, '');
             if (!query) {
                 return sock.sendMessage(chat, { 
                     text: `ꕤ Ingresa el título o enlace a buscar ✰\n\n> ꕤ *Ejemplo:* ${p}play Kamikaze - Víctor Mendivil` 
@@ -151,54 +143,40 @@ export default {
             const urlMatch = query.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/|v\/))([a-zA-Z0-9_-]{11})/);
             if (urlMatch) searchQuery = `https://youtu.be/${urlMatch[1]}`;
 
-            const cacheKey = searchQuery.toLowerCase();
-            let video = cache.get(cacheKey);
-
-            if (!video) {
-                const searchResult = await yts(searchQuery);
-                if (!searchResult?.videos?.length) {
-                    emitProgress(msgId, 'no_results', { query });
-                    return sock.sendMessage(chat, { 
-                        text: `   ׄ  ✿  No se encontraron resultados para *${query}*, por favor intenta con otro nombre o enlace.` 
-                    }, { quoted: msg });
-                }
-                video = searchResult.videos[0];
-                const videoId = video.videoId || (urlMatch ? urlMatch[1] : '');
-                video = {
-                    ...video,
-                    link: `https://youtu.be/${videoId}`,
-                    thumb: video.thumbnail || video.image || `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`
-                };
-                cache.set(cacheKey, video);
-                if (videoId) { 
-                    cache.set(videoId, video); 
-                    cache.set(video.link.toLowerCase(), video); 
-                }
-            }
-
-            if (video.seconds && video.seconds > MAX_DURATION_SECONDS) {
+            const searchResult = await yts(searchQuery);
+            if (!searchResult?.videos?.length) {
+                emitProgress(msgId, 'no_results', { query });
                 return sock.sendMessage(chat, { 
-                    text: `   ׄ  ✿ El audio dura *${video.timestamp}*, superando el límite máximo permitido de *7 minutos*.` 
+                    text: `   ׄ  ✿  No se encontraron resultados para *${query}*, por favor intenta con otro nombre o enlace.` 
                 }, { quoted: msg });
             }
 
-            const videoUrl = safeString(video.link || video.url, '');
-            const title = safeString(video.title, 'Sin título').trim() || 'Sin título';
-            const thumb = safeString(video.thumb || video.thumbnail || video.image, '');
-            const channel = safeString(video.author?.name || video.author || "Desconocido", "Desconocido");
+            const video = searchResult.videos[0];
+            const videoId = video.videoId || (urlMatch ? urlMatch[1] : '');
+            const videoUrl = `https://youtu.be/${videoId}`;
+            const title = cleanText(video.title) || 'Sin título';
+            const thumb = cleanText(video.thumbnail || video.image || `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`);
+            const channel = cleanText(video.author?.name || video.author || "Desconocido") || "Desconocido";
             const views = typeof video.views === 'number' ? video.views : 0;
-            const duration = safeString(video.timestamp || video.duration || "", "");
+            const duration = cleanText(video.timestamp || video.duration || "") || "";
+
+            if (video.seconds && video.seconds > MAX_DURATION_SECONDS) {
+                return sock.sendMessage(chat, { 
+                    text: `   ׄ  ✿ El audio dura *${duration}*, superando el límite máximo permitido de *7 minutos*.` 
+                }, { quoted: msg });
+            }
 
             emitProgress(msgId, 'media_found', { title, duration, channel, videoUrl });
 
-            const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Canal* » ${channel}\nׅ  ׄ  ✿ *Vistas* » ${formatViews(views)}\nׅ  ׄ  ✿ *Tiempo* » ${duration}\nׅ  ׄ  ✿ *Link* » ${videoUrl}\n\nׅ  ׄ  ✿ *¡Enviando audio, por favor espera!*`.trim();
+            const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Canal* » ${channel}\nׅ  ׄ  ✿ *Vistas* » ${formatViews(views)}\nׅ  ׄ  ✿ *Tiempo* » ${duration}\nׅ  ׄ  ✿ *Link* » ${videoUrl}\n\nׅ  ׄ  ✿ *¡Enviando audio, por favor espera!*`;
 
             emitProgress(msgId, 'fetching_thumbnail');
 
             const streamPromise = getDownloadStreamSequential(videoUrl, msgId);
-            const thumbBufferPromise = thumb ? getBuffer(thumb, 10000).catch(() => null) : Promise.resolve(null);
-
-            const [thumbBuffer] = await Promise.all([thumbBufferPromise]);
+            let thumbBuffer = null;
+            if (thumb) {
+                try { thumbBuffer = await getBuffer(thumb, 10000); } catch {}
+            }
 
             if (thumbBuffer) {
                 await sock.sendMessage(chat, { image: thumbBuffer, caption }, { quoted: msg });
@@ -214,7 +192,6 @@ export default {
             if (streamData.isVideo) {
                 emitProgress(msgId, 'downloading_video_stream');
                 const videoBuffer = await getBuffer(streamData.url);
-                
                 emitProgress(msgId, 'converting_video_to_audio');
                 audioBuffer = await convertVideoToAudioBuffer(videoBuffer);
             } else {
