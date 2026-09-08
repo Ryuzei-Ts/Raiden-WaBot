@@ -19,6 +19,52 @@ const getBuffer = async (url: string, timeoutMs = 30000): Promise<Buffer> => {
     }
 };
 
+const formatNumber = (num: number) => {
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+    return num.toString();
+};
+
+const getInstagramData = async (url: string) => {
+    try {
+        const endpoint = `https://api.delirius.online/download/instagramv2?url=${encodeURIComponent(url)}`;
+        const res = await axios.get(endpoint, {
+            timeout: 20000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 15; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+                'Accept': 'application/json'
+            }
+        });
+        
+        if (res.data?.status && res.data?.data) {
+            return { success: true, data: res.data.data, source: 'v2' };
+        }
+        return { success: false };
+    } catch {
+        return { success: false };
+    }
+};
+
+const getInstagramDataFallback = async (url: string) => {
+    try {
+        const endpoint = `https://api.delirius.online/download/instagram?url=${encodeURIComponent(url)}`;
+        const res = await axios.get(endpoint, {
+            timeout: 20000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 15; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+                'Accept': 'application/json'
+            }
+        });
+        
+        if (res.data?.status && res.data?.data && Array.isArray(res.data.data) && res.data.data.length > 0) {
+            return { success: true, data: res.data.data, source: 'v1' };
+        }
+        return { success: false };
+    } catch {
+        return { success: false };
+    }
+};
+
 export default {
     command: ['instagram', 'ig', 'igdl'],
     description: 'Descarga contenido de Instagram',
@@ -44,19 +90,14 @@ export default {
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'search_started', url });
 
-            const endpoint = `https://api.delirius.online/download/instagram?url=${encodeURIComponent(url)}`;
+            let result = await getInstagramData(url);
+            let isV2 = result.success;
+            
+            if (!result.success) {
+                result = await getInstagramDataFallback(url);
+            }
 
-            const res = await axios.get(endpoint, {
-                timeout: 20000,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Linux; Android 15; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-                    'Accept': 'application/json'
-                }
-            });
-
-            const data = res.data?.data;
-
-            if (!res.data?.status || !data || !Array.isArray(data) || data.length === 0) {
+            if (!result.success) {
                 global.broadcast?.('cmd_progress', { id: msgId, step: 'no_results', url });
                 return sock.sendMessage(chat, { 
                     text: `   ׄ  ✿  No se pudo obtener el contenido de Instagram. Verifica el enlace.` 
@@ -65,22 +106,56 @@ export default {
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'downloading_media' });
 
-            const mediaResults = [];
-            for (const item of data) {
-                if (item?.url) {
-                    try {
-                        const buffer = await getBuffer(item.url, 30000);
-                        mediaResults.push({
-                            type: item.type || 'image',
-                            buffer: buffer
-                        });
-                    } catch (err) {
-                        continue;
+            let mediaItems = [];
+            let title = '';
+            let username = '';
+            let fullname = '';
+            let likes = 0;
+            let comments = 0;
+
+            if (isV2) {
+                const data = result.data;
+                username = data.username || 'Desconocido';
+                fullname = data.fullname || 'Desconocido';
+                likes = data.likes || 0;
+                comments = data.comments || 0;
+                title = data.caption ? data.caption.trim() : 'Sin título';
+                
+                if (data.download && Array.isArray(data.download)) {
+                    for (const item of data.download) {
+                        if (item?.url) {
+                            try {
+                                const buffer = await getBuffer(item.url, 30000);
+                                mediaItems.push({
+                                    type: item.type || 'image',
+                                    buffer: buffer
+                                });
+                            } catch (err) {
+                                continue;
+                            }
+                        }
+                    }
+                }
+            } else {
+                const data = result.data;
+                if (Array.isArray(data)) {
+                    for (const item of data) {
+                        if (item?.url) {
+                            try {
+                                const buffer = await getBuffer(item.url, 30000);
+                                mediaItems.push({
+                                    type: item.type || 'image',
+                                    buffer: buffer
+                                });
+                            } catch (err) {
+                                continue;
+                            }
+                        }
                     }
                 }
             }
 
-            if (mediaResults.length === 0) {
+            if (mediaItems.length === 0) {
                 return sock.sendMessage(chat, { 
                     text: `   ׄ  ✿  No se pudo descargar ningún archivo multimedia.` 
                 }, { quoted: m });
@@ -88,23 +163,31 @@ export default {
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'sending_media' });
 
-            let result;
-            for (const media of mediaResults) {
+            let captionText = '';
+            if (isV2) {
+                const titlePreview = title.length > 200 ? title.substring(0, 200) + '...' : title;
+                captionText = `﹒𝜗ৎ      ࣪  *${titlePreview}*\n\nׅ  ׄ  ✿ *Usuario* » ${fullname} (@${username})\nׅ  ׄ  ✿ *Likes* » ${formatNumber(likes)}\nׅ  ׄ  ✿ *Comentarios* » ${formatNumber(comments)}\n\nׅ  ׄ  ✿ Made with love By *Ryuzei*`.trim();
+            }
+
+            let lastResult;
+            for (const media of mediaItems) {
                 if (media.type === 'video') {
-                    result = await sock.sendMessage(chat, { 
+                    lastResult = await sock.sendMessage(chat, { 
                         video: media.buffer,
+                        caption: captionText || undefined,
                         gifPlayback: false
                     }, { quoted: m });
                 } else {
-                    result = await sock.sendMessage(chat, { 
-                        image: media.buffer
+                    lastResult = await sock.sendMessage(chat, { 
+                        image: media.buffer,
+                        caption: captionText || undefined
                     }, { quoted: m });
                 }
             }
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'completed' });
 
-            return result;
+            return lastResult;
 
         } catch (error: any) {
             global.broadcast?.('cmd_progress', { id: msgId, step: 'error', error: error.message || String(error) });
