@@ -2,7 +2,7 @@ import { UserJid } from '#simple';
 import { saveDB } from '#db';
 
 export default {
-    command: ['marryhistory', 'historial', 'historialmatrimonial'],
+    command: ['history', 'historial', 'historialmatrimonial', 'marryhistory'],
     description: 'Muestra el historial matrimonial de un usuario',
     category: 'profile',
     group: true,
