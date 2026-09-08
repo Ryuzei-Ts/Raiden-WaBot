@@ -119,17 +119,7 @@ export default {
             global.broadcast?.('cmd_progress', { id: msgId, step: 'sending_sticker' });
 
             const result = await sock.sendMessage(chat, { 
-                sticker: stickerData,
-                contextInfo: {
-                    externalAdReply: {
-                        title: stickerName,
-                        body: `By ${authorName}`,
-                        thumbnail: stickerData,
-                        sourceUrl: selectedPack.url || 'https://sticker.ly/',
-                        mediaType: 1,
-                        renderLargerThumbnail: true
-                    }
-                }
+                sticker: stickerData
             }, { quoted: m });
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'completed' });
