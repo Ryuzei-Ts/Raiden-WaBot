@@ -269,13 +269,7 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         edit: (text: string, key: any) => {
             if (!key) return Promise.resolve(null);
             return sock.sendMessage(chat, { text, edit: key });
-        },
-        getAverageTime: () => getAverageTime(rawCommand),
-        getExecutionStats: () => ({
-            command: rawCommand,
-            averageTime: getAverageTime(rawCommand),
-            totalExecutions: (executionTimes.get(rawCommand) || []).length
-        })
+        }
     };
 
     if (cmd._exec) {
@@ -296,6 +290,10 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
                 if (!dbData.users) dbData.users = {};
                 if (!dbData.users[cleanSender]) dbData.users[cleanSender] = {};
                 const userDb = dbData.users[cleanSender];
+                
+                if (!userDb.commands) userDb.commands = {};
+                userDb.commands[rawCommand] = (userDb.commands[rawCommand] || 0) + 1;
+                
                 userDb.usedcommands = (userDb.usedcommands || 0) + 1;
                 userDb.exp = (userDb.exp || 0) + Math.floor(Math.random() * 10) + 5;
                 if (isGroup && dbData.chats?.[chat]?.users?.[cleanSender]) {
@@ -306,7 +304,8 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
                     chat,
                     user: cleanSender,
                     exp: userDb.exp,
-                    usedcommands: userDb.usedcommands
+                    usedcommands: userDb.usedcommands,
+                    command: rawCommand
                 });
             });
         }
