@@ -10,10 +10,21 @@ const LEMPI_KEYS = ['lem488', 'Midnight1', 'Midnight', 'lem691', 'lem678'];
 const MAX_DURATION_SECONDS = 7 * 60;
 const MAX_FILE_SIZE_BYTES = 30 * 1024 * 1024;
 
+const cleanText = (text: any): string => {
+    if (text === null || text === undefined) return '';
+    if (typeof text === 'string') return text.replace(/^\s+|\s+$/g, '');
+    if (typeof text === 'number') return String(text);
+    if (typeof text === 'object') {
+        try { return JSON.stringify(text).replace(/^\s+|\s+$/g, ''); } 
+        catch { return ''; }
+    }
+    return String(text).replace(/^\s+|\s+$/g, '');
+};
+
 const formatViews = (v: number) => 
     v >= 1e9 ? (v / 1e9).toFixed(1) + 'B' : 
     v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : 
-    v >= 1e3 ? (v / 1e3).toFixed(1) + 'K' : v.toString();
+    v >= 1e3 ? (v / 1e3).toFixed(1) + 'K' : String(v);
 
 const emitProgress = (msgId: string, step: string, extraData: Record<string, any> = {}) => {
     queueMicrotask(() => {
@@ -103,7 +114,7 @@ export default {
         const msgId = msg?.id || msg?.key?.id;
 
         try {
-            const query = args.join(" ").trim();
+            const query = args.join(" ").replace(/^\s+|\s+$/g, '');
             if (!query) {
                 return sock.sendMessage(chat, { 
                     text: `ꕤ Ingresa el título o enlace del video a buscar ✰\n\n> ꕤ *Ejemplo:* ${p}video Kamikaze - Víctor Mendivil` 
@@ -147,23 +158,24 @@ export default {
                 }, { quoted: msg });
             }
 
-            const videoUrl = video.link || video.url;
-            const title = (video.title || "").trim();
-            const thumb = video.thumb || video.thumbnail || video.image;
-            const channel = video.author?.name || video.author || "Desconocido";
-            const views = video.views || 0;
-            const duration = video.timestamp || video.duration || "";
+            const videoUrl = cleanText(video.link || video.url) || '';
+            const title = cleanText(video.title) || 'Sin título';
+            const thumb = cleanText(video.thumb || video.thumbnail || video.image) || '';
+            const channel = cleanText(video.author?.name || video.author || "Desconocido") || "Desconocido";
+            const views = typeof video.views === 'number' ? video.views : 0;
+            const duration = cleanText(video.timestamp || video.duration || "") || "";
 
             emitProgress(msgId, 'media_found', { title, duration, channel, videoUrl });
 
-            const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Canal* » ${channel}\nׅ  ׄ  ✿ *Vistas* » ${formatViews(views)}\nׅ  ׄ  ✿ *Tiempo* » ${duration}\nׅ  ׄ  ✿ *Link* » ${videoUrl}\n\nׅ  ׄ  ✿ *¡Enviando video, por favor espera!*`.trim();
+            const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Canal* » ${channel}\nׅ  ׄ  ✿ *Vistas* » ${formatViews(views)}\nׅ  ׄ  ✿ *Tiempo* » ${duration}\nׅ  ׄ  ✿ *Link* » ${videoUrl}\n\nׅ  ׄ  ✿ *¡Enviando video, por favor espera!*`;
 
             emitProgress(msgId, 'fetching_thumbnail');
 
             const downloadUrlPromise = getVideoDownloadUrl(videoUrl, msgId);
-            const thumbBufferPromise = getBuffer(thumb, 10000).catch(() => null);
-
-            const [thumbBuffer] = await Promise.all([thumbBufferPromise]);
+            let thumbBuffer = null;
+            if (thumb) {
+                try { thumbBuffer = await getBuffer(thumb, 10000); } catch {}
+            }
 
             if (thumbBuffer) {
                 await sock.sendMessage(chat, { image: thumbBuffer, caption }, { quoted: msg });
