@@ -31,7 +31,7 @@ const emitProgress = (msgId: string, step: string, extraData: Record<string, any
     });
 };
 
-const getBuffer = async (url: string, timeoutMs = 45000): Promise<Buffer> => {
+const getBuffer = async (url: string, timeoutMs = 30000): Promise<Buffer> => {
     try {
         const res = await axios.get(url, {
             responseType: 'arraybuffer',
@@ -50,7 +50,16 @@ const getBuffer = async (url: string, timeoutMs = 45000): Promise<Buffer> => {
 };
 
 const convertVideoToAudioBuffer = (videoBuffer: Buffer): Promise<Buffer> => new Promise((resolve, reject) => {
-    const ffmpeg = spawn('ffmpeg', ['-i', 'pipe:0', '-vn', '-c:a', 'libmp3lame', '-b:a', '128k', '-preset', 'ultrafast', '-f', 'mp3', 'pipe:1']);
+    const ffmpeg = spawn('ffmpeg', [
+        '-i', 'pipe:0',
+        '-vn',
+        '-c:a', 'libmp3lame',
+        '-b:a', '96k',
+        '-preset', 'ultrafast',
+        '-threads', '2',
+        '-f', 'mp3',
+        'pipe:1'
+    ]);
     const chunks: Buffer[] = [];
     ffmpeg.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
     ffmpeg.on('close', (code) => code === 0 ? resolve(Buffer.concat(chunks)) : reject(new Error(`FFmpeg error (${code})`)));
@@ -82,7 +91,7 @@ const extractDownloadUrl = (data: any): string => {
     return candidate;
 };
 
-const fetchWithTimeout = async (url: string, timeoutMs = 15000): Promise<any> => {
+const fetchWithTimeout = async (url: string, timeoutMs = 10000): Promise<any> => {
     const res = await axios.get(url, {
         timeout: timeoutMs,
         headers: { 
@@ -104,6 +113,23 @@ const getDownloadStreamSequential = async (link: string, msgId?: string): Promis
         { url: `https://api.lempi.lat/dl/ytv?url=${encoded}&apikey=${LEMPI_KEYS[1]}`, isVideo: true },
         { url: `https://api.stellarwa.xyz/dl/ytmp3?url=${encoded}&key=${STELLAR_KEY}`, isVideo: false }
     ];
+
+    const promises = apis.map((api, index) => 
+        fetchWithTimeout(api.url, 8000)
+            .then(data => ({ data, isVideo: api.isVideo, index }))
+            .catch(err => ({ error: err, index }))
+    );
+
+    const results = await Promise.all(promises);
+    
+    for (const result of results) {
+        if (result.data) {
+            try {
+                const dlUrl = extractDownloadUrl(result.data);
+                return { url: dlUrl, isVideo: result.isVideo };
+            } catch {}
+        }
+    }
 
     for (let i = 0; i < apis.length; i++) {
         const api = apis[i];
@@ -173,9 +199,10 @@ export default {
             emitProgress(msgId, 'fetching_thumbnail');
 
             const streamPromise = getDownloadStreamSequential(videoUrl, msgId);
+            
             let thumbBuffer = null;
             if (thumb) {
-                try { thumbBuffer = await getBuffer(thumb, 10000); } catch {}
+                try { thumbBuffer = await getBuffer(thumb, 8000); } catch {}
             }
 
             if (thumbBuffer) {
@@ -191,12 +218,12 @@ export default {
             let audioBuffer: Buffer;
             if (streamData.isVideo) {
                 emitProgress(msgId, 'downloading_video_stream');
-                const videoBuffer = await getBuffer(streamData.url);
+                const videoBuffer = await getBuffer(streamData.url, 25000);
                 emitProgress(msgId, 'converting_video_to_audio');
                 audioBuffer = await convertVideoToAudioBuffer(videoBuffer);
             } else {
                 emitProgress(msgId, 'downloading_audio_stream');
-                audioBuffer = await getBuffer(streamData.url);
+                audioBuffer = await getBuffer(streamData.url, 25000);
             }
 
             if (audioBuffer.length > MAX_FILE_SIZE_BYTES) {
