@@ -57,7 +57,7 @@ export default {
                 return msg.reply(`《✤》 La categoría *${categoryArg}* no fue encontrada.`);
             }
 
-            const categoryOrder = ['main', 'info', 'download', 'sticker', 'group', 'fun', 'game', 'economy', 'admin', 'nsfw', 'anime', 'tools', 'utils', 'otros'];
+            const categoryOrder = ['main', 'info', 'download', 'profile', 'admin', 'stickers', 'tools', 'utils', 'fun', 'game', 'economy', 'gacha', 'logo', 'anime', 'nsfw', 'otros'];
             const sortedCategories = Object.keys(categories).sort((a, b) => {
                 const indexA = categoryOrder.indexOf(a);
                 const indexB = categoryOrder.indexOf(b);
@@ -68,10 +68,22 @@ export default {
             });
 
             const categoryEmojis: { [key: string]: string } = {
-                'main': '☁️', 'info': '🌷', 'download': '🛍️', 'sticker': '⭐',
-                'group': '☕', 'fun': '🪼', 'game': '🌸', 'economy': '🪷',
-                'admin': '🦋', 'nsfw': '🍓', 'anime': '🧈', 'tools': '💐',
-                'utils': '🍚', 'otros': '❀'
+                'main': '☁️',
+                'info': '🌷',
+                'download': '🛍️',
+                'profile': '🌸',
+                'admin': '🦋',
+                'stickers': '⭐',
+                'tools': '💐',
+                'utils': '🍚',
+                'fun': '🪼',
+                'game': '🎮',
+                'economy': '🪷',
+                'gacha': '🎴',
+                'logo': '🍰',
+                'anime': '🧈',
+                'nsfw': '🍓',
+                'otros': '❀'
             };
 
             for (const category of sortedCategories) {
@@ -94,16 +106,26 @@ export default {
 
             const textMessage = menu;
 
-            await sock.sendMessage(chat, {
+            let linkPreview = undefined;
+            if (bannerUrl) {
+                try {
+                    const media = await prepareWAMessageMedia({ image: { url: bannerUrl } }, { upload: sock.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });
+                    if (media?.imageMessage) {
+                        linkPreview = {
+                            'canonical-url': link,
+                            'matched-text': link,
+                            title: config.botName,
+                            description: `Made with love by ${config.devName}`,
+                            jpegThumbnail: media.imageMessage.jpegThumbnail ? Buffer.from(media.imageMessage.jpegThumbnail) : undefined,
+                            highQualityThumbnail: media.imageMessage || undefined
+                        };
+                    }
+                } catch {}
+            }
+
+            sock.sendMessage(chat, {
                 text: textMessage,
-                linkPreview: bannerUrl ? (await prepareWAMessageMedia({ image: { url: bannerUrl } }, { upload: sock.waUploadToServer, mediaTypeOverride: 'thumbnail-link' }).then(({ imageMessage }) => ({
-                    'canonical-url': link,
-                    'matched-text': link,
-                    title: config.botName,
-                    description: `Made with love by ${config.devName}`,
-                    jpegThumbnail: imageMessage?.jpegThumbnail ? Buffer.from(imageMessage.jpegThumbnail) : undefined,
-                    highQualityThumbnail: imageMessage || undefined
-                })).catch(() => undefined)) : undefined,
+                linkPreview: linkPreview,
                 contextInfo: {
                     isForwarded: false
                 }
@@ -111,7 +133,7 @@ export default {
 
         } catch (e: any) {
             console.error(e);
-            await msg.reply('《✤》 Ocurrió un error al generar el menú.');
+            msg.reply('《✤》 Ocurrió un error al generar el menú.');
         }
     }
 };
