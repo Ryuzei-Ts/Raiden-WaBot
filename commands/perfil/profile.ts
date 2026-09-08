@@ -2,6 +2,8 @@ import { UserJid } from '#simple';
 import config from '#config';
 import { saveDB } from '#db';
 
+const normalizeNumber = (x: string) => String(x || "").split("@")[0].split(":")[0].replace(/[^\d]/g, "").trim();
+
 export default {
     command: ['perfil', 'profile', 'user'],
     description: 'Muestra el perfil de un usuario',
@@ -18,23 +20,55 @@ export default {
             const quotedSender = m.message?.extendedTextMessage?.contextInfo?.quotedMessage?.key?.sender;
             
             let targetJid: string;
+            let targetNumber: string;
+            
             if (mentionedJid) {
                 targetJid = mentionedJid;
+                targetNumber = normalizeNumber(mentionedJid);
             } else if (quotedSender) {
                 targetJid = quotedSender;
+                targetNumber = normalizeNumber(quotedSender);
             } else if (participant) {
                 targetJid = participant;
+                targetNumber = normalizeNumber(participant);
             } else if (q) {
-                const cleanNumber = q.replace(/[^0-9]/g, '');
-                targetJid = cleanNumber + '@s.whatsapp.net';
+                targetNumber = q.replace(/[^0-9]/g, '');
+                targetJid = targetNumber + '@s.whatsapp.net';
             } else {
                 targetJid = realSender;
+                targetNumber = normalizeNumber(realSender);
             }
 
-            const user = (global as any).db.data.users[targetJid];
+            // Buscar usuario por número normalizado en la base de datos
+            let user = (global as any).db.data.users[targetJid];
+            
+            // Si no se encuentra por JID exacto, buscar por número normalizado
+            if (!user) {
+                const allUsers = (global as any).db.data.users;
+                for (const [key, value] of Object.entries(allUsers)) {
+                    const keyNumber = normalizeNumber(key);
+                    if (keyNumber === targetNumber) {
+                        user = value;
+                        targetJid = key;
+                        break;
+                    }
+                }
+            }
+            
             const chatData = (global as any).db.data.chats[chat] || {};
             const chatUsers = chatData.users || {};
-            const userInChat = chatUsers[targetJid] || {};
+            let userInChat = chatUsers[targetJid] || {};
+            
+            // Si no se encuentra en chat_users por JID, buscar por número normalizado
+            if (!userInChat || Object.keys(userInChat).length === 0) {
+                for (const [key, value] of Object.entries(chatUsers)) {
+                    const keyNumber = normalizeNumber(key);
+                    if (keyNumber === targetNumber) {
+                        userInChat = value;
+                        break;
+                    }
+                }
+            }
             
             if (!user || ((user.exp || 0) === 0 && (user.usedcommands || 0) === 0)) {
                 return reply(`✿ El usuario no está registrado en la base de datos.`);
