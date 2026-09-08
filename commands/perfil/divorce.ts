@@ -26,6 +26,36 @@ export default {
             const partner = user.marry;
             const partnerUser = usersDB[partner] || {};
 
+            const fechaActual = new Date();
+            const fechaFin = fechaActual.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+            const fechaCompleta = fechaActual.toLocaleString('es-ES', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+            // Actualizar historial del usuario
+            if (user.marryHistory && user.marryHistory.length > 0) {
+                const lastMarriage = user.marryHistory[user.marryHistory.length - 1];
+                if (lastMarriage && lastMarriage.fin === 'presente') {
+                    lastMarriage.fin = fechaCompleta;
+                    // Calcular duración aproximada (en días)
+                    const inicio = new Date(lastMarriage.inicio);
+                    const fin = new Date(fechaCompleta);
+                    const diffTime = Math.abs(fin.getTime() - inicio.getTime());
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    lastMarriage.duracion = `${diffDays} días`;
+                }
+            }
+
+            if (partnerUser.marryHistory && partnerUser.marryHistory.length > 0) {
+                const lastMarriage = partnerUser.marryHistory[partnerUser.marryHistory.length - 1];
+                if (lastMarriage && lastMarriage.fin === 'presente') {
+                    lastMarriage.fin = fechaCompleta;
+                    const inicio = new Date(lastMarriage.inicio);
+                    const fin = new Date(fechaCompleta);
+                    const diffTime = Math.abs(fin.getTime() - inicio.getTime());
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    lastMarriage.duracion = `${diffDays} días`;
+                }
+            }
+
             delete user.marry;
             delete partnerUser.marry;
 
