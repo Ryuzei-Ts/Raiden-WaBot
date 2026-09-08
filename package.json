@@ -11,6 +11,7 @@
   "imports": {
     "#config": "./config.ts",
     "#simple": "./lib/simple.ts",
+    "#sticker": "./lib/stickers.ts",
     "#db": "./lib/database.ts",
     "#logomaker": "./lib/logomaker.ts",
     "#handler": "./handler.ts",
