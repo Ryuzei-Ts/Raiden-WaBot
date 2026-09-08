@@ -5,6 +5,7 @@ export default {
     command: ['lyrics', 'letra', 'lyric'],
     description: 'Busca la letra de una canción',
     category: 'download',
+    group: true,
     run: async ({ chat, m, sock, args, usedPrefix, prefix }: any) => {
         const p = usedPrefix || prefix || config.prefix || '.';
         const msgId = m?.id || m?.key?.id;
