@@ -39,11 +39,19 @@ export default {
             let nextLevelXp = level * 500;
             let percent = Math.min(Math.floor((xp / nextLevelXp) * 100), 100);
             
+            if (xp >= nextLevelXp) {
+                level = Math.floor(xp / 500) + 1;
+                user.level = level;
+                nextLevelXp = level * 500;
+                percent = Math.min(Math.floor((xp / nextLevelXp) * 100), 100);
+                (global as any).saveDB();
+            }
+            
             let imgUrl: string;
             try {
                 imgUrl = await sock.profilePictureUrl(targetJid, 'image');
             } catch {
-                imgUrl = 'https://cdn.ryuzei.xyz/files/cv46xgk.jpeg';
+                imgUrl = 'https://cdn.nexylight.xyz/files/cv46xgk.jpeg';
             }
 
             let statusMarry = '';
@@ -58,6 +66,7 @@ export default {
 
             const formatGenre = (user.genre || 'Sin especificar').charAt(0).toUpperCase() + (user.genre || 'Sin especificar').slice(1);
 
+            const coinName = (config as any)?.coin || '¥enes';
             const coins = userInChat.coins || 0;
             const bank = userInChat.bank || 0;
 
@@ -72,8 +81,8 @@ export default {
             caption += `❖ Nivel: *${level}*\n`;
             caption += `☆ Experiencia: *${xp.toLocaleString()} / ${nextLevelXp.toLocaleString()} XP*\n`;
             caption += `# Progreso: *${percent}%*\n\n`;
-            caption += `⛁ Monedas: *${coins.toLocaleString()} Coins*\n`;
-            caption += `⛁ Banco: *${bank.toLocaleString()} Stars*\n`;
+            caption += `⛁ Monedas: *${coins.toLocaleString()} ${coinName}*\n`;
+            caption += `⛁ Banco: *${bank.toLocaleString()} ${coinName}*\n`;
             caption += `❒ Harem: *${(userInChat.characters || []).length} personajes*\n`;
             caption += `✐ Comandos usados: *${(user.usedcommands || 0).toLocaleString()}*`;
 
