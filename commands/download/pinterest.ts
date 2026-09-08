@@ -26,6 +26,7 @@ export default {
     command: ['pinterest', 'pin'],
     description: 'Busca e imágen de Pinterest',
     category: 'download',
+    group: true,
     run: async ({ chat, m, sock, args, usedPrefix, prefix }: any) => {
         const p = usedPrefix || prefix || config.prefix || '.';
         const msgId = m?.id || m?.key?.id;
