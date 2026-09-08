@@ -3,7 +3,7 @@ import config from '#config';
 import { imageToWebp, videoToWebp, writeExif } from '#sticker';
 import fs from 'fs';
 
-const getBuffer = async (url: string, timeoutMs = 30000): Promise<Buffer> => {
+const getBuffer = async (url: string, timeoutMs = 40000): Promise<Buffer> => {
     try {
         const res = await axios.get(url, {
             responseType: 'arraybuffer',
@@ -33,7 +33,7 @@ const convertWithRetry = async (buffer: Buffer, isAnimated: boolean, maxRetries:
         } catch (error) {
             lastError = error;
             if (attempt < maxRetries) {
-                await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+                await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
             }
         }
     }
@@ -51,7 +51,7 @@ const createStickerWithRetry = async (webpBuffer: Buffer, stickerName: string, a
         } catch (error) {
             lastError = error;
             if (attempt < maxRetries) {
-                await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+                await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
             }
         }
     }
@@ -61,7 +61,7 @@ const createStickerWithRetry = async (webpBuffer: Buffer, stickerName: string, a
 export default {
     command: ['ssearch', 'stickerly', 'stickers'],
     description: 'Busca stickers en Sticker.ly',
-    category: 'download',
+    category: 'stickers',
     run: async ({ chat, m, sock, args, usedPrefix, prefix }: any) => {
         const p = usedPrefix || prefix || config.prefix || '.';
         const msgId = m?.id || m?.key?.id;
@@ -75,10 +75,6 @@ export default {
             }
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'search_started', query });
-
-            await sock.sendMessage(chat, { 
-                text: `   ׄ  ✿  Buscando stickers para *${query}*...` 
-            }, { quoted: m });
 
             const endpoint = `https://api.delirius.online/search/stickerly?query=${encodeURIComponent(query)}`;
 
@@ -127,17 +123,9 @@ export default {
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'downloading_sticker' });
 
-            await sock.sendMessage(chat, { 
-                text: `   ׄ  ✿  Descargando sticker...` 
-            }, { quoted: m });
-
             const previewBuffer = await getBuffer(selectedPack.preview, 15000);
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'converting_sticker' });
-
-            await sock.sendMessage(chat, { 
-                text: `   ׄ  ✿  Convirtiendo sticker (puede tomar unos segundos)...` 
-            }, { quoted: m });
 
             let webpBuffer: Buffer;
             let stickerFile: string;
@@ -181,8 +169,6 @@ export default {
                 errorMsg = '   ׄ  ✿  Demasiadas solicitudes. Espera un momento e intenta de nuevo.';
             } else if (error.message?.includes('ffmpeg') || error.message?.includes('libwebp')) {
                 errorMsg = '   ׄ  ✿  Error al procesar el sticker. Intenta de nuevo en unos segundos.';
-            } else {
-                errorMsg = `   ׄ  ✿  Error: ${error.message || 'Error desconocido'}`;
             }
             
             return sock.sendMessage(chat, { 
