@@ -3,6 +3,7 @@ import { saveDB } from '#db';
 
 export default {
     command: ['setmeta'],
+    description: 'Guarda metadatos por defecto para tus stickers',
     category: 'stickers',
     group: true,
     run: async ({ chat, m, sock, args, usedPrefix, prefix, sender }: any) => {
