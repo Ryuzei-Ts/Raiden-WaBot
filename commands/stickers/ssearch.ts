@@ -1,6 +1,7 @@
 import axios from 'axios';
 import config from '#config';
 import { imageToWebp, videoToWebp, writeExif } from '#sticker';
+import fs from 'fs';
 
 const getBuffer = async (url: string, timeoutMs = 30000): Promise<Buffer> => {
     try {
@@ -92,40 +93,57 @@ export default {
             let webpBuffer: Buffer;
             let stickerFile: string;
 
-            if (isAnimated) {
-                webpBuffer = await videoToWebp(previewBuffer);
-            } else {
-                webpBuffer = await imageToWebp(previewBuffer);
+            try {
+                if (isAnimated) {
+                    webpBuffer = await videoToWebp(previewBuffer);
+                } else {
+                    webpBuffer = await imageToWebp(previewBuffer);
+                }
+
+                stickerFile = await writeExif(
+                    { data: webpBuffer, mimetype: 'image/webp' },
+                    { packname: stickerName, author: authorName, categories: ['🤩', '🎉'] }
+                );
+
+                // Verificar que el archivo existe
+                if (!fs.existsSync(stickerFile)) {
+                    throw new Error('El archivo de sticker no se creó correctamente');
+                }
+
+                const stickerData = await getBuffer(stickerFile);
+
+                // Limpiar archivo temporal
+                try {
+                    fs.unlinkSync(stickerFile);
+                } catch {}
+
+                global.broadcast?.('cmd_progress', { id: msgId, step: 'sending_sticker' });
+
+                const result = await sock.sendMessage(chat, { 
+                    sticker: stickerData,
+                    contextInfo: {
+                        externalAdReply: {
+                            title: stickerName,
+                            body: `By ${authorName}`,
+                            thumbnail: stickerData,
+                            sourceUrl: selectedPack.url || 'https://sticker.ly/',
+                            mediaType: 1,
+                            renderLargerThumbnail: true
+                        }
+                    }
+                }, { quoted: m });
+
+                global.broadcast?.('cmd_progress', { id: msgId, step: 'completed' });
+
+                return result;
+
+            } catch (convertError: any) {
+                console.error('Error en conversión:', convertError);
+                throw new Error(`Error al convertir sticker: ${convertError.message}`);
             }
 
-            stickerFile = await writeExif(
-                { data: webpBuffer, mimetype: 'image/webp' },
-                { packname: stickerName, author: authorName, categories: ['🤩', '🎉'] }
-            );
-
-            const stickerData = await getBuffer(stickerFile);
-
-            global.broadcast?.('cmd_progress', { id: msgId, step: 'sending_sticker' });
-
-            const result = await sock.sendMessage(chat, { 
-                sticker: stickerData,
-                contextInfo: {
-                    externalAdReply: {
-                        title: stickerName,
-                        body: `By ${authorName}`,
-                        thumbnail: stickerData,
-                        sourceUrl: selectedPack.url || 'https://sticker.ly/',
-                        mediaType: 1,
-                        renderLargerThumbnail: true
-                    }
-                }
-            }, { quoted: m });
-
-            global.broadcast?.('cmd_progress', { id: msgId, step: 'completed' });
-
-            return result;
-
         } catch (error: any) {
+            console.error('Error completo:', error);
             global.broadcast?.('cmd_progress', { id: msgId, step: 'error', error: error.message || String(error) });
             
             let errorMsg = '   ׄ  ✿  Ocurrió un error al procesar tu solicitud.';
@@ -133,6 +151,8 @@ export default {
                 errorMsg = '   ׄ  ✿  El servidor tardó demasiado en responder. Intenta de nuevo.';
             } else if (error.response?.status === 429) {
                 errorMsg = '   ׄ  ✿  Demasiadas solicitudes. Espera un momento e intenta de nuevo.';
+            } else if (error.message?.includes('ffmpeg') || error.message?.includes('libwebp')) {
+                errorMsg = '   ׄ  ✿  Error al procesar el sticker. Asegúrate de tener ffmpeg instalado.';
             }
             
             return sock.sendMessage(chat, { 
