@@ -24,6 +24,9 @@ const processedMsgIds = new LRUCache<string, boolean>({
 });
 
 const userRateLimits = new Map<string, { count: number; resetTime: number }>();
+const commandMap = new Map<string, any>();
+let lastPluginsRef: any = null;
+const executionTimes = new Map<string, number[]>();
 
 export function invalidateGroupCache(chatId: string): void {
     if (chatId) groupMetaCache.delete(chatId);
@@ -56,9 +59,6 @@ function getAdminSet(participants: any[]): Set<string> {
     return adminSet;
 }
 
-const commandMap = new Map<string, any>();
-let lastPluginsRef: any = null;
-
 function syncCommandMapIfNeeded(): void {
     const currentPlugins = (global as any).plugins;
     if (currentPlugins === lastPluginsRef) return;
@@ -78,10 +78,14 @@ function syncCommandMapIfNeeded(): void {
             const cmd = plugin.command;
             if (Array.isArray(cmd)) {
                 for (let j = 0; j < cmd.length; j++) {
-                    commandMap.set(String(cmd[j]).toLowerCase(), plugin);
+                    const cmdStr = String(cmd[j]).toLowerCase().trim();
+                    commandMap.set(cmdStr, plugin);
+                    commandMap.set(normalizeString(cmdStr), plugin);
                 }
             } else {
-                commandMap.set(String(cmd).toLowerCase(), plugin);
+                const cmdStr = String(cmd).toLowerCase().trim();
+                commandMap.set(cmdStr, plugin);
+                commandMap.set(normalizeString(cmdStr), plugin);
             }
         }
     }
@@ -126,6 +130,19 @@ function logHandlerError(e: any): void {
     }
 }
 
+function updateExecutionTime(command: string, time: number): void {
+    const times = executionTimes.get(command) || [];
+    times.push(time);
+    if (times.length > 100) times.shift();
+    executionTimes.set(command, times);
+}
+
+function getAverageTime(command: string): number {
+    const times = executionTimes.get(command);
+    if (!times || !times.length) return 0;
+    return times.reduce((a, b) => a + b, 0) / times.length;
+}
+
 export const handler = async (sock: any, rawMsg: any): Promise<any> => {
     const startTime = Date.now();
     
@@ -141,15 +158,15 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
     const prefix = (config as any)?.prefix || '.';
     if (msg.body.charCodeAt(0) !== prefix.charCodeAt(0)) return;
 
-    const spaceIndex = msg.body.indexOf(' ');
-    const commandName = (spaceIndex === -1 ? msg.body.slice(prefix.length) : msg.body.slice(prefix.length, spaceIndex));
-    if (!commandName) return;
+    const bodyWithoutPrefix = msg.body.slice(prefix.length).trim();
+    if (!bodyWithoutPrefix) return;
 
-    const normalizedCommandName = normalizeString(commandName);
-    if (!normalizedCommandName) return;
+    const spaceIndex = bodyWithoutPrefix.indexOf(' ');
+    const rawCommand = spaceIndex === -1 ? bodyWithoutPrefix : bodyWithoutPrefix.slice(0, spaceIndex);
+    if (!rawCommand) return;
 
     syncCommandMapIfNeeded();
-    const cmd = commandMap.get(normalizedCommandName);
+    const cmd = commandMap.get(rawCommand.toLowerCase()) || commandMap.get(normalizeString(rawCommand));
     if (!cmd) return;
 
     const chat = msg.chat || msg.from || rawMsg?.key?.remoteJid;
@@ -185,7 +202,7 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         queueMicrotask(() => {
             broadcast('security_event', {
                 type: 'unauthorized_access',
-                command: commandName,
+                command: rawCommand,
                 sender: normalizedSender,
                 chat
             });
@@ -216,7 +233,7 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         queueMicrotask(() => {
             broadcast('security_event', {
                 type: 'unauthorized_admin_command',
-                command: commandName,
+                command: rawCommand,
                 sender: normalizedSender,
                 chat
             });
@@ -230,37 +247,7 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
     const cleanSender = normalizedSender + '@s.whatsapp.net';
     const dbData = (global as any).db?.data;
 
-    queueMicrotask(() => {
-        broadcast('command_received', {
-            msgId,
-            command: commandName,
-            chat,
-            sender: msg.sender,
-            isGroup,
-            timestamp: startTime
-        });
-        registerData(sock, msg).catch(() => {});
-
-        if (dbData) {
-            if (!dbData.users) dbData.users = {};
-            if (!dbData.users[cleanSender]) dbData.users[cleanSender] = {};
-            const userDb = dbData.users[cleanSender];
-            userDb.usedcommands = (userDb.usedcommands || 0) + 1;
-            userDb.exp = (userDb.exp || 0) + Math.floor(Math.random() * 10) + 5;
-            if (isGroup && dbData.chats?.[chat]?.users?.[cleanSender]) {
-                dbData.chats[chat].users[cleanSender].lastCmd = Date.now();
-            }
-            saveDB(chat, cleanSender);
-            broadcast('db_updated', {
-                chat,
-                user: cleanSender,
-                exp: userDb.exp,
-                usedcommands: userDb.usedcommands
-            });
-        }
-    });
-
-    const rawArgs = spaceIndex === -1 ? [] : msg.body.slice(spaceIndex + 1).trim().split(/ +/);
+    const rawArgs = spaceIndex === -1 ? [] : bodyWithoutPrefix.slice(spaceIndex + 1).trim().split(/ +/);
     const args = rawArgs.map(arg => arg.replace(/[&;|$`]/g, ''));
 
     const ctx = {
@@ -269,7 +256,7 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         m: msg,
         msg,
         args,
-        command: commandName,
+        command: rawCommand,
         prefix,
         usedPrefix: prefix,
         owner: isOwner,
@@ -282,13 +269,51 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         edit: (text: string, key: any) => {
             if (!key) return Promise.resolve(null);
             return sock.sendMessage(chat, { text, edit: key });
-        }
+        },
+        getAverageTime: () => getAverageTime(rawCommand),
+        getExecutionStats: () => ({
+            command: rawCommand,
+            averageTime: getAverageTime(rawCommand),
+            totalExecutions: (executionTimes.get(rawCommand) || []).length
+        })
     };
 
     if (cmd._exec) {
         queueMicrotask(() => {
+            broadcast('command_received', {
+                msgId,
+                command: rawCommand,
+                chat,
+                sender: msg.sender,
+                isGroup,
+                timestamp: startTime
+            });
+            registerData(sock, msg).catch(() => {});
+        });
+
+        if (dbData) {
+            queueMicrotask(() => {
+                if (!dbData.users) dbData.users = {};
+                if (!dbData.users[cleanSender]) dbData.users[cleanSender] = {};
+                const userDb = dbData.users[cleanSender];
+                userDb.usedcommands = (userDb.usedcommands || 0) + 1;
+                userDb.exp = (userDb.exp || 0) + Math.floor(Math.random() * 10) + 5;
+                if (isGroup && dbData.chats?.[chat]?.users?.[cleanSender]) {
+                    dbData.chats[chat].users[cleanSender].lastCmd = Date.now();
+                }
+                saveDB(chat, cleanSender);
+                broadcast('db_updated', {
+                    chat,
+                    user: cleanSender,
+                    exp: userDb.exp,
+                    usedcommands: userDb.usedcommands
+                });
+            });
+        }
+
+        queueMicrotask(() => {
             broadcast('command_executing', {
-                command: commandName,
+                command: rawCommand,
                 chat,
                 sender: cleanSender
             });
@@ -296,13 +321,17 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
 
         try {
             const result = await cmd._exec(ctx);
+            const executionTime = Date.now() - startTime;
+            
+            updateExecutionTime(rawCommand, executionTime);
             
             queueMicrotask(() => {
                 broadcast('command_executed', {
-                    command: commandName,
+                    command: rawCommand,
                     chat,
                     sender: cleanSender,
-                    executionTimeMs: Date.now() - startTime
+                    executionTimeMs: executionTime,
+                    averageTime: getAverageTime(rawCommand)
                 });
             });
 
