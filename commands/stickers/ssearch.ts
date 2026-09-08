@@ -1,9 +1,9 @@
 import axios from 'axios';
 import config from '#config';
-import { imageToWebp, videoToWebp, writeExif } from '#sticker';
+import { writeExif } from '#sticker';
 import fs from 'fs';
 
-const getBuffer = async (url: string, timeoutMs = 40000): Promise<Buffer> => {
+const getBuffer = async (url: string, timeoutMs = 30000): Promise<Buffer> => {
     try {
         const res = await axios.get(url, {
             responseType: 'arraybuffer',
@@ -19,43 +19,6 @@ const getBuffer = async (url: string, timeoutMs = 40000): Promise<Buffer> => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return Buffer.from(await res.arrayBuffer());
     }
-};
-
-const convertWithRetry = async (buffer: Buffer, isAnimated: boolean, maxRetries: number = 3): Promise<Buffer> => {
-    let lastError: any;
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            if (isAnimated) {
-                return await videoToWebp(buffer);
-            } else {
-                return await imageToWebp(buffer);
-            }
-        } catch (error) {
-            lastError = error;
-            if (attempt < maxRetries) {
-                await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
-            }
-        }
-    }
-    throw lastError;
-};
-
-const createStickerWithRetry = async (webpBuffer: Buffer, stickerName: string, authorName: string, maxRetries: number = 3): Promise<string> => {
-    let lastError: any;
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            return await writeExif(
-                { data: webpBuffer, mimetype: 'image/webp' },
-                { packname: stickerName, author: authorName, categories: ['🤩', '🎉'] }
-            );
-        } catch (error) {
-            lastError = error;
-            if (attempt < maxRetries) {
-                await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
-            }
-        }
-    }
-    throw lastError;
 };
 
 export default {
@@ -105,7 +68,7 @@ export default {
                 if (!usedIndexes.has(randomIndex)) {
                     usedIndexes.add(randomIndex);
                     const pack = data[randomIndex];
-                    if (pack?.preview) {
+                    if (pack?.preview && !pack.isAnimated) {
                         selectedPack = pack;
                         break;
                     }
@@ -114,12 +77,11 @@ export default {
             }
 
             if (!selectedPack) {
-                selectedPack = data.find((pack: any) => pack?.preview) || data[0];
+                selectedPack = data.find((pack: any) => pack?.preview && !pack.isAnimated) || data.find((pack: any) => pack?.preview) || data[0];
             }
 
             const stickerName = selectedPack.name || 'Sin nombre';
-            const authorName = 'Raiden WaBot 🍰';
-            const isAnimated = selectedPack.isAnimated || false;
+            const authorName = selectedPack.author || 'Raiden WaBot 🍰';
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'downloading_sticker' });
 
@@ -127,12 +89,12 @@ export default {
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'converting_sticker' });
 
-            let webpBuffer: Buffer;
             let stickerFile: string;
-
             try {
-                webpBuffer = await convertWithRetry(previewBuffer, isAnimated, 3);
-                stickerFile = await createStickerWithRetry(webpBuffer, stickerName, authorName, 3);
+                stickerFile = await writeExif(
+                    { data: previewBuffer, mimetype: 'image/png' },
+                    { packname: stickerName, author: authorName, categories: ['🤩', '🎉'] }
+                );
             } catch (convertError: any) {
                 console.error('Error en conversión:', convertError);
                 throw new Error(`Error al convertir: ${convertError.message}`);
