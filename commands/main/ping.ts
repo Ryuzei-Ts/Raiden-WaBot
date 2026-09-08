@@ -8,12 +8,12 @@ export default {
     run: async ({ chat, m, sock }: any) => {
         const start = performance.now();
 
-        await sock.sendMessage(chat, { 
+        sock.sendMessage(chat, { 
             text: '✰ Calculando...', 
-        }, { quoted: m }).then(async (sent: any) => {
+        }, { quoted: m }).then((sent: any) => {
             const latency = performance.now() - start;
             
-            await sock.sendMessage(chat, { 
+            sock.sendMessage(chat, { 
                 text: `✰ ¡Pong!\n> Tiempo ⴵ ${latency.toFixed(2)}ms`,
                 edit: sent.key 
             }).catch(() => {});
