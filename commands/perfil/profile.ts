@@ -71,12 +71,36 @@ export default {
             const coins = userInChat.coins || 0;
             const bank = userInChat.bank || 0;
 
+            let birthFormatted = 'Sin especificar';
+            if (user.birth) {
+                const parts = user.birth.split('/');
+                if (parts.length === 2) {
+                    const mes = parseInt(parts[0]);
+                    const dia = parseInt(parts[1]);
+                    const mesesNombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+                    const diasSemana = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+                    const añoActual = new Date().getFullYear();
+                    const fechaObj = new Date(añoActual, mes - 1, dia);
+                    const diaSemana = diasSemana[fechaObj.getDay()];
+                    birthFormatted = `${diaSemana}, ${dia} de ${mesesNombres[mes - 1]}`;
+                } else if (parts.length === 3) {
+                    const mes = parseInt(parts[0]);
+                    const dia = parseInt(parts[1]);
+                    const año = parts[2];
+                    const mesesNombres = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+                    const diasSemana = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+                    const fechaObj = new Date(parseInt(año), mes - 1, dia);
+                    const diaSemana = diasSemana[fechaObj.getDay()];
+                    birthFormatted = `${diaSemana}, ${dia} de ${mesesNombres[mes - 1]} de ${año}`;
+                }
+            }
+
             let caption = `✿ Perfil de \`${user.name || 'Usuario'}\`\n\n`;
             if (user.description && user.description.trim() !== '') {
                 caption += `${user.description}\n\n`;
             }
             
-            caption += `✰ Cumpleaños: *${user.birth || 'Sin especificar'}*\n`;
+            caption += `✰ Cumpleaños: *${birthFormatted}*\n`;
             caption += `✰ Género: *${formatGenre}*\n`;
             caption += statusMarry + `\n`;
             caption += `❖ Nivel: *${level}*\n`;
