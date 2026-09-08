@@ -21,6 +21,43 @@ const getBuffer = async (url: string, timeoutMs = 30000): Promise<Buffer> => {
     }
 };
 
+const convertWithRetry = async (buffer: Buffer, isAnimated: boolean, maxRetries: number = 3): Promise<Buffer> => {
+    let lastError: any;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            if (isAnimated) {
+                return await videoToWebp(buffer);
+            } else {
+                return await imageToWebp(buffer);
+            }
+        } catch (error) {
+            lastError = error;
+            if (attempt < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            }
+        }
+    }
+    throw lastError;
+};
+
+const createStickerWithRetry = async (webpBuffer: Buffer, stickerName: string, authorName: string, maxRetries: number = 3): Promise<string> => {
+    let lastError: any;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return await writeExif(
+                { data: webpBuffer, mimetype: 'image/webp' },
+                { packname: stickerName, author: authorName, categories: ['🤩', '🎉'] }
+            );
+        } catch (error) {
+            lastError = error;
+            if (attempt < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            }
+        }
+    }
+    throw lastError;
+};
+
 export default {
     command: ['ssearch', 'stickerly', 'stickers'],
     description: 'Busca stickers en Sticker.ly',
@@ -38,6 +75,10 @@ export default {
             }
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'search_started', query });
+
+            await sock.sendMessage(chat, { 
+                text: `   ׄ  ✿  Buscando stickers para *${query}*...` 
+            }, { quoted: m });
 
             const endpoint = `https://api.delirius.online/search/stickerly?query=${encodeURIComponent(query)}`;
 
@@ -86,24 +127,27 @@ export default {
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'downloading_sticker' });
 
+            await sock.sendMessage(chat, { 
+                text: `   ׄ  ✿  Descargando sticker...` 
+            }, { quoted: m });
+
             const previewBuffer = await getBuffer(selectedPack.preview, 15000);
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'converting_sticker' });
 
+            await sock.sendMessage(chat, { 
+                text: `   ׄ  ✿  Convirtiendo sticker (puede tomar unos segundos)...` 
+            }, { quoted: m });
+
+            let webpBuffer: Buffer;
             let stickerFile: string;
 
-            if (isAnimated) {
-                const webpBuffer = await videoToWebp(previewBuffer);
-                stickerFile = await writeExif(
-                    { data: webpBuffer, mimetype: 'image/webp' },
-                    { packname: stickerName, author: authorName, categories: ['🤩', '🎉'] }
-                );
-            } else {
-                const webpBuffer = await imageToWebp(previewBuffer);
-                stickerFile = await writeExif(
-                    { data: webpBuffer, mimetype: 'image/webp' },
-                    { packname: stickerName, author: authorName, categories: ['🤩', '🎉'] }
-                );
+            try {
+                webpBuffer = await convertWithRetry(previewBuffer, isAnimated, 3);
+                stickerFile = await createStickerWithRetry(webpBuffer, stickerName, authorName, 3);
+            } catch (convertError: any) {
+                console.error('Error en conversión:', convertError);
+                throw new Error(`Error al convertir: ${convertError.message}`);
             }
 
             if (!fs.existsSync(stickerFile)) {
@@ -127,7 +171,7 @@ export default {
             return result;
 
         } catch (error: any) {
-            console.error('Error:', error);
+            console.error('Error completo:', error);
             global.broadcast?.('cmd_progress', { id: msgId, step: 'error', error: error.message || String(error) });
             
             let errorMsg = '   ׄ  ✿  Ocurrió un error al procesar tu solicitud.';
@@ -136,7 +180,9 @@ export default {
             } else if (error.response?.status === 429) {
                 errorMsg = '   ׄ  ✿  Demasiadas solicitudes. Espera un momento e intenta de nuevo.';
             } else if (error.message?.includes('ffmpeg') || error.message?.includes('libwebp')) {
-                errorMsg = '   ׄ  ✿  Error al procesar el sticker. Asegúrate de tener ffmpeg instalado.';
+                errorMsg = '   ׄ  ✿  Error al procesar el sticker. Intenta de nuevo en unos segundos.';
+            } else {
+                errorMsg = `   ׄ  ✿  Error: ${error.message || 'Error desconocido'}`;
             }
             
             return sock.sendMessage(chat, { 
