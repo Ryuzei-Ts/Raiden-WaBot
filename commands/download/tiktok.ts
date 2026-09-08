@@ -1,8 +1,5 @@
 import axios from 'axios';
-import { LRUCache } from 'lru-cache';
 import config from '#config';
-
-const usedVideosCache = new LRUCache<string, Set<string>>({ max: 100, ttl: 3600000 });
 
 const getBuffer = async (url: string, timeoutMs = 30000): Promise<Buffer> => {
     try {
@@ -82,24 +79,21 @@ export default {
                 }, { quoted: m });
             }
 
-            const cacheKey = data.id;
-            if (!usedVideosCache.has(cacheKey)) {
-                usedVideosCache.set(cacheKey, new Set<string>());
-            }
-            const usedSet = usedVideosCache.get(cacheKey)!;
-            usedSet.add(videoUrl);
-
-            const title = data.title || 'Sin título';
+            let title = (data.title || 'Sin título').trim();
             const author = data.author?.nickname || data.author?.username || 'Desconocido';
             const username = data.author?.username || 'Desconocido';
-            const likes = data.like || 0;
-            const shares = data.share || 0;
-            const comments = data.comment || 0;
-            const published = data.published || 'Fecha desconocida';
+            const likes = parseInt(String(data.like || 0).replace(/\./g, ''));
+            const durationFormatted = data.duration || 0;
             const musicTitle = data.music?.title || 'Sin música';
             const musicAuthor = data.music?.author || 'Desconocido';
 
-            const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Autor* » ${author} (@${username})\nׅ  ׄ  ✿ *Likes* » ${likes}\nׅ  ׄ  ✿ *Comentarios* » ${comments}\nׅ  ׄ  ✿ *Compartidos* » ${shares}\nׅ  ׄ  ✿ *Duración* » ${duration}s\nׅ  ׄ  ✿ *Publicado* » ${published}\nׅ  ׄ  ✿ *Música* » ${musicTitle} - ${musicAuthor}\n\nׅ  ׄ  ✿ Made with love By *Ryuzei*`.trim();
+            const formatNumber = (num: number) => {
+                if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+                if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+                return num.toString();
+            };
+
+            const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Autor* » ${author} (@${username})\nׅ  ׄ  ✿ *Likes* » ${formatNumber(likes)}\nׅ  ׄ  ✿ *Duración* » ${durationFormatted}s\nׅ  ׄ  ✿ *Música* » ${musicTitle} - ${musicAuthor}\n\nׅ  ׄ  ✿ Made with love By *Ryuzei*`.trim();
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'downloading_video' });
 
