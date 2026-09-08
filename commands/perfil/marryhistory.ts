@@ -43,7 +43,6 @@ export default {
                 return reply(`✿ El usuario no está registrado en la base de datos.`);
             }
 
-            const userName = user.name || targetJid.split('@')[0];
             const history = user.marryHistory || [];
             const currentPartner = user.marry;
 
@@ -54,17 +53,22 @@ export default {
                 let term = 'Casad@';
                 if (gender === 'mujer' || gender === 'femenino') term = 'Casada';
                 else if (gender === 'hombre' || gender === 'masculino') term = 'Casado';
+                else if (gender === 'otro') term = 'Casade';
                 else term = 'Casade';
-                const fechaInicio = history.length > 0 && history[history.length - 1].fecha ? history[history.length - 1].fecha : 'fecha desconocida';
+                
+                const currentMarriage = history.find((h: any) => h.fin === 'presente');
+                const fechaInicio = currentMarriage ? currentMarriage.fecha : 'fecha desconocida';
                 statusText = `♡ Estado actual » *${term} con ${partnerName}* _(desde ${fechaInicio})_`;
             } else {
                 statusText = `♡ Estado actual » *Sin pareja actualmente*`;
             }
 
+            const previousMarriages = history.filter((h: any) => h.fin !== 'presente');
+            
             let historyText = '';
-            if (history.length > 0) {
-                historyText = `✐ Matrimonios anteriores _(${history.length})_:\n`;
-                history.forEach((h: any, index: number) => {
+            if (previousMarriages.length > 0) {
+                historyText = `✐ Matrimonios anteriores _(${previousMarriages.length})_:\n`;
+                previousMarriages.forEach((h: any, index: number) => {
                     const partnerName = usersDB[h.partner]?.name || h.partner.split('@')[0];
                     const duracion = h.duracion || 'desconocida';
                     historyText += `${index + 1}. Con *${partnerName}* » ${h.inicio} → ${h.fin} _(${duracion})_\n`;
