@@ -12,6 +12,16 @@ const STELLAR_KEY = 'Midnight';
 const MAX_DURATION_SECONDS = 7 * 60;
 const MAX_FILE_SIZE_BYTES = 30 * 1024 * 1024;
 
+const safeString = (value: any, fallback: string = ''): string => {
+    if (value === null || value === undefined) return fallback;
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    if (typeof value === 'object') {
+        try { return JSON.stringify(value); } catch { return fallback; }
+    }
+    return fallback;
+};
+
 const formatViews = (v: number) => 
     v >= 1e9 ? (v / 1e9).toFixed(1) + 'B' : 
     v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : 
@@ -172,12 +182,12 @@ export default {
                 }, { quoted: msg });
             }
 
-            const videoUrl = video.link || video.url;
-            const title = (video.title && typeof video.title === 'string') ? video.title.trim() : 'Sin título';
-            const thumb = video.thumb || video.thumbnail || video.image;
-            const channel = video.author?.name || video.author || "Desconocido";
-            const views = video.views || 0;
-            const duration = video.timestamp || video.duration || "";
+            const videoUrl = safeString(video.link || video.url, '');
+            const title = safeString(video.title, 'Sin título').trim() || 'Sin título';
+            const thumb = safeString(video.thumb || video.thumbnail || video.image, '');
+            const channel = safeString(video.author?.name || video.author || "Desconocido", "Desconocido");
+            const views = typeof video.views === 'number' ? video.views : 0;
+            const duration = safeString(video.timestamp || video.duration || "", "");
 
             emitProgress(msgId, 'media_found', { title, duration, channel, videoUrl });
 
@@ -186,7 +196,7 @@ export default {
             emitProgress(msgId, 'fetching_thumbnail');
 
             const streamPromise = getDownloadStreamSequential(videoUrl, msgId);
-            const thumbBufferPromise = getBuffer(thumb, 10000).catch(() => null);
+            const thumbBufferPromise = thumb ? getBuffer(thumb, 10000).catch(() => null) : Promise.resolve(null);
 
             const [thumbBuffer] = await Promise.all([thumbBufferPromise]);
 
