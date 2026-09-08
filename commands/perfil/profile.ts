@@ -6,23 +6,7 @@ const normalizeNumber = (x: string) => {
     if (!x) return '';
     let cleaned = String(x).split('@')[0].split(':').pop() || '';
     cleaned = cleaned.replace(/[^\d]/g, '');
-    if (cleaned.startsWith('521')) return cleaned;
-    if (cleaned.startsWith('52') && cleaned.length === 12) return cleaned;
     return cleaned;
-};
-
-const getJidFromMention = (mention: string): string => {
-    if (!mention) return '';
-    if (mention.includes('@s.whatsapp.net')) return mention;
-    if (mention.includes('@c.us')) return mention.replace('@c.us', '@s.whatsapp.net');
-    if (mention.includes('lid:')) {
-        const parts = mention.split(':');
-        const lastPart = parts[parts.length - 1];
-        if (lastPart.includes('@')) return lastPart;
-        return lastPart + '@s.whatsapp.net';
-    }
-    if (/^\d+$/.test(mention)) return mention + '@s.whatsapp.net';
-    return mention;
 };
 
 export default {
@@ -38,51 +22,35 @@ export default {
             const q = args[0];
             
             let mentionedJid = m.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
-            let participant = m.message?.extendedTextMessage?.contextInfo?.participant;
             let quotedSender = m.message?.extendedTextMessage?.contextInfo?.quotedMessage?.key?.sender;
-            
-            console.log('[PERFIL DEBUG] raw sender:', sender);
-            console.log('[PERFIL DEBUG] realSender:', realSender);
-            console.log('[PERFIL DEBUG] mentionedJid:', mentionedJid);
-            console.log('[PERFIL DEBUG] participant:', participant);
-            console.log('[PERFIL DEBUG] quotedSender:', quotedSender);
-            console.log('[PERFIL DEBUG] q (args):', q);
+            let participant = m.message?.extendedTextMessage?.contextInfo?.participant;
             
             let targetJid: string;
             let targetNumber: string;
             
             if (mentionedJid) {
-                targetJid = getJidFromMention(mentionedJid);
-                targetNumber = normalizeNumber(mentionedJid);
-                console.log('[PERFIL DEBUG] targetJid from mention:', targetJid);
-                console.log('[PERFIL DEBUG] targetNumber from mention:', targetNumber);
+                const resolvedMention = await UserJid(sock, chat, mentionedJid);
+                targetJid = resolvedMention;
+                targetNumber = normalizeNumber(resolvedMention);
             } else if (quotedSender) {
-                targetJid = getJidFromMention(quotedSender);
-                targetNumber = normalizeNumber(quotedSender);
-                console.log('[PERFIL DEBUG] targetJid from quoted:', targetJid);
-                console.log('[PERFIL DEBUG] targetNumber from quoted:', targetNumber);
+                const resolvedQuoted = await UserJid(sock, chat, quotedSender);
+                targetJid = resolvedQuoted;
+                targetNumber = normalizeNumber(resolvedQuoted);
             } else if (participant) {
-                targetJid = getJidFromMention(participant);
-                targetNumber = normalizeNumber(participant);
-                console.log('[PERFIL DEBUG] targetJid from participant:', targetJid);
-                console.log('[PERFIL DEBUG] targetNumber from participant:', targetNumber);
+                const resolvedParticipant = await UserJid(sock, chat, participant);
+                targetJid = resolvedParticipant;
+                targetNumber = normalizeNumber(resolvedParticipant);
             } else if (q) {
-                targetNumber = q.replace(/[^0-9]/g, '');
-                targetJid = targetNumber + '@s.whatsapp.net';
-                console.log('[PERFIL DEBUG] targetJid from q:', targetJid);
-                console.log('[PERFIL DEBUG] targetNumber from q:', targetNumber);
+                const cleanNumber = q.replace(/[^0-9]/g, '');
+                targetJid = cleanNumber + '@s.whatsapp.net';
+                targetNumber = cleanNumber;
             } else {
                 targetJid = realSender;
                 targetNumber = normalizeNumber(realSender);
-                console.log('[PERFIL DEBUG] targetJid from realSender:', targetJid);
-                console.log('[PERFIL DEBUG] targetNumber from realSender:', targetNumber);
             }
 
             const usersDB = (global as any).db.data.users;
-            console.log('[PERFIL DEBUG] usersDB keys:', Object.keys(usersDB));
-            
             let user = usersDB[targetJid];
-            console.log('[PERFIL DEBUG] user found by exact JID:', user ? 'YES' : 'NO');
             
             if (!user || ((user.exp || 0) === 0 && (user.usedcommands || 0) === 0)) {
                 let foundUser = null;
@@ -90,13 +58,9 @@ export default {
                 
                 for (const [key, value] of Object.entries(usersDB)) {
                     const keyNumber = normalizeNumber(key);
-                    console.log('[PERFIL DEBUG] checking key:', key, 'keyNumber:', keyNumber);
-                    if (keyNumber === targetNumber || 
-                        keyNumber === targetNumber.replace(/^52/, '521') || 
-                        keyNumber === targetNumber.replace(/^521/, '52')) {
+                    if (keyNumber === targetNumber) {
                         foundUser = value;
                         foundKey = key;
-                        console.log('[PERFIL DEBUG] MATCH FOUND! key:', key, 'keyNumber:', keyNumber);
                         break;
                     }
                 }
@@ -104,9 +68,6 @@ export default {
                 if (foundUser) {
                     user = foundUser;
                     targetJid = foundKey;
-                    console.log('[PERFIL DEBUG] user found by number match:', targetJid);
-                } else {
-                    console.log('[PERFIL DEBUG] NO MATCH found for number:', targetNumber);
                 }
             }
             
@@ -117,22 +78,14 @@ export default {
             if (!userInChat || Object.keys(userInChat).length === 0) {
                 for (const [key, value] of Object.entries(chatUsers)) {
                     const keyNumber = normalizeNumber(key);
-                    if (keyNumber === targetNumber || 
-                        keyNumber === targetNumber.replace(/^52/, '521') || 
-                        keyNumber === targetNumber.replace(/^521/, '52')) {
+                    if (keyNumber === targetNumber) {
                         userInChat = value;
-                        console.log('[PERFIL DEBUG] userInChat found by number match:', key);
                         break;
                     }
                 }
             }
             
-            console.log('[PERFIL DEBUG] final user:', user ? 'EXISTS' : 'NULL');
-            console.log('[PERFIL DEBUG] final targetJid:', targetJid);
-            console.log('[PERFIL DEBUG] final targetNumber:', targetNumber);
-            
             if (!user || ((user.exp || 0) === 0 && (user.usedcommands || 0) === 0)) {
-                console.log('[PERFIL DEBUG] USER NOT REGISTERED - returning error');
                 return reply(`✿ El usuario no está registrado en la base de datos.`);
             }
 
