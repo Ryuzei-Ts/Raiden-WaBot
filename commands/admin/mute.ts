@@ -29,24 +29,29 @@ export default {
 
             let targetJid: string | null = null;
             let targetNumber: string | null = null;
+            let displayName: string | null = null;
 
             if (mentionedJid && mentionedJid !== '') {
                 const resolvedMention = await UserJid(sock, chat, mentionedJid);
                 targetJid = resolvedMention;
                 targetNumber = normalizeNumber(resolvedMention);
+                displayName = resolvedMention.split('@')[0];
             } else if (quotedSender) {
                 const resolvedQuoted = await UserJid(sock, chat, quotedSender);
                 targetJid = resolvedQuoted;
                 targetNumber = normalizeNumber(resolvedQuoted);
+                displayName = resolvedQuoted.split('@')[0];
             } else if (participant) {
                 const resolvedParticipant = await UserJid(sock, chat, participant);
                 targetJid = resolvedParticipant;
                 targetNumber = normalizeNumber(resolvedParticipant);
+                displayName = resolvedParticipant.split('@')[0];
             } else if (q && q.trim() !== '' && !q.startsWith('@')) {
                 const cleanNumber = q.replace(/[^0-9]/g, '');
                 if (cleanNumber) {
                     targetJid = cleanNumber + '@s.whatsapp.net';
                     targetNumber = cleanNumber;
+                    displayName = cleanNumber;
                 }
             }
 
@@ -70,14 +75,17 @@ export default {
             }
 
             if (chatDb.muteds.includes(targetNumber)) {
-                return reply(`✰ El usuario @${targetNumber} ya se encuentra silenciado.`, { mentions: [targetJid] });
+                return sock.sendMessage(chat, {
+                    text: `✰ El usuario @${displayName} ya se encuentra silenciado.`,
+                    mentions: [targetJid]
+                }, { quoted: m });
             }
 
             chatDb.muteds.push(targetNumber);
             saveDB(chat);
 
             return sock.sendMessage(chat, {
-                text: `✰ El usuario @${targetNumber} ha sido silenciado en este grupo. Sus mensajes serán eliminados.`,
+                text: `✰ El usuario @${displayName} ha sido silenciado en este grupo. Sus mensajes serán eliminados.`,
                 mentions: [targetJid]
             }, { quoted: m });
 
