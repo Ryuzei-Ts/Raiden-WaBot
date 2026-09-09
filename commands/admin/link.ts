@@ -1,6 +1,4 @@
-import { saveDB } from '#db';
-import config from '#config';
-import { prepareWAMessageMedia } from '#utils';
+import { prepareWAMessageMedia } from '@whiskeysockets/baileys';
 
 export default {
     command: ['link', 'grouplink', 'enlace'],
@@ -10,7 +8,7 @@ export default {
     admin: true,
     botAdmin: true,
     run: async (ctx: any) => {
-        const { chat, m, sock, usedPrefix, command } = ctx;
+        const { chat, m, sock } = ctx;
 
         const reply = (txt: string) => {
             if (typeof m.reply === 'function') {
