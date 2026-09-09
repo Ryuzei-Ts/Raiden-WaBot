@@ -37,7 +37,7 @@ export default {
 
             if (enableValues.includes(input)) {
                 if (chatDb.antilinks) {
-                    return reply(`✰ El Antilink *ya se encuentra activado*.`);
+                    return reply(`✰ El Antilink ya estaba activado.`);
                 }
                 chatDb.antilinks = true;
                 saveDB(chat);
@@ -46,11 +46,11 @@ export default {
 
             if (disableValues.includes(input)) {
                 if (!chatDb.antilinks) {
-                    return reply(`✰ El Antilink *ya se encuentra desactivado*.`);
+                    return reply(`✰ El Antilink ya estaba desactivado.`);
                 }
                 chatDb.antilinks = false;
                 saveDB(chat);
-                return reply(`✰ El sistema *Antilink* ha sido *desactivado* correctamente.`);
+                return reply(`✰ El sistema *Antilink* ha sido *desactivado*.`);
             }
 
             const errorText = 
