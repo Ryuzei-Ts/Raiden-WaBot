@@ -135,8 +135,8 @@ const getDownloadStreamSequential = async (link: string, msgId?: string): Promis
     ];
 
     const results = await Promise.all(apis.map(async (api, index) => {
+        const startTime = performance.now();
         try {
-            const startTime = performance.now();
             const data = await fetchWithTimeout(api.url, 2500);
             const endTime = performance.now();
             const responseTime = endTime - startTime;
@@ -150,11 +150,13 @@ const getDownloadStreamSequential = async (link: string, msgId?: string): Promis
                 responseTime 
             };
         } catch (error: any) {
+            const endTime = performance.now();
+            const responseTime = endTime - startTime;
             return { 
                 success: false, 
                 error: error.message || String(error),
                 index,
-                responseTime: performance.now() - startTime
+                responseTime
             };
         }
     }));
