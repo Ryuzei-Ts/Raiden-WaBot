@@ -26,6 +26,7 @@ const processedMsgIds = new LRUCache<string, boolean>({
 
 const userRateLimits = new Map<string, { count: number; resetTime: number }>();
 const commandMap = new Map<string, any>();
+const adminOnlyWarned = new Map<string, Set<string>>();
 let lastPluginsRef: any = null;
 
 export function invalidateGroupCache(chatId: string): void {
@@ -37,6 +38,12 @@ setInterval(() => {
     for (const [key, value] of userRateLimits.entries()) {
         if (now > value.resetTime) {
             userRateLimits.delete(key);
+        }
+    }
+    for (const [chat, users] of adminOnlyWarned.entries()) {
+        const chatDb = (global as any).db?.data?.chats?.[chat];
+        if (!chatDb?.adminonly) {
+            adminOnlyWarned.delete(chat);
         }
     }
 }, 60000);
@@ -248,6 +255,19 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
     }
     if (cmd.group && !isGroup) {
         return msg.reply('ׅ  ׄ  ✿ Este comando solo se puede usar en grupos.');
+    }
+
+    const onlyAdminEnabled = currentChatDb.adminonly === true;
+    if (onlyAdminEnabled && !isAdmins && !isOwner) {
+        if (!adminOnlyWarned.has(chat)) {
+            adminOnlyWarned.set(chat, new Set());
+        }
+        const warnedUsers = adminOnlyWarned.get(chat)!;
+        if (!warnedUsers.has(normalizedSender)) {
+            warnedUsers.add(normalizedSender);
+            return msg.reply('ׅ  ׄ  ✿ El modo *Solo Admin* está activado, solo administradores pueden usar comandos.');
+        }
+        return;
     }
 
     if (cmd.admin && !isAdmins && !isOwner) {
