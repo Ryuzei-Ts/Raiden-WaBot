@@ -38,8 +38,8 @@ export default {
 
                 if (participant) {
                     const jid = participant.id;
-                    const name = participant.name || participant.notify || mutedNumber;
-                    mutedList += `✰ @${name}\n`;
+                    const displayName = participant.name || participant.notify || mutedNumber;
+                    mutedList += `✰ @${displayName}\n`;
                     mentions.push(jid);
                 } else {
                     const jid = mutedNumber + '@s.whatsapp.net';
