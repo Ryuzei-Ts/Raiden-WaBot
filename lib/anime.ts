@@ -26,9 +26,17 @@ function getRandomEmoji() {
 }
 
 function getPhrases(phrases: any, gender: string, type: 'solo' | 'together') {
-    const genderKey = gender === 'Hombre' ? 'hombre' : 
-                     gender === 'Mujer' ? 'mujer' : 
-                     gender === 'Otro' ? 'otro' : 'indefinido';
+    let genderKey = 'indefinido';
+    
+    if (gender === 'Hombre' || gender === 'Masculino' || gender === 'masculino' || gender === 'hombre') {
+        genderKey = 'hombre';
+    } else if (gender === 'Mujer' || gender === 'Femenino' || gender === 'femenino' || gender === 'mujer') {
+        genderKey = 'mujer';
+    } else if (gender === 'Otro' || gender === 'otro') {
+        genderKey = 'otro';
+    } else {
+        genderKey = 'indefinido';
+    }
     
     const target = type === 'solo' ? phrases.soloPhrases : phrases.togetherPhrases;
     
@@ -106,13 +114,14 @@ export function animeMaker(options: AnimeOptions) {
                     }
                 }
 
-                const senderUser = global.db?.data?.users?.[senderJid] || {};
+                const usersDB = global.db?.data?.users || {};
+                const senderUser = usersDB[senderJid] || {};
                 const senderName = m.pushName || senderUser.name || senderJid.split('@')[0];
                 const senderGenre = senderUser.genre || 'Indefinido';
 
                 let targetName = 'Usuario';
                 if (targetJid) {
-                    const targetUser = global.db?.data?.users?.[targetJid] || {};
+                    const targetUser = usersDB[targetJid] || {};
                     targetName = targetUser.name || targetJid.split('@')[0];
                 }
 
