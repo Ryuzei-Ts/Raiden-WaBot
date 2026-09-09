@@ -15,7 +15,10 @@ export default {
             const userName = msg.pushName || 'Usuario';
             const link = 'https://ryuzei.xyz';
 
-            let menu = `︶⊹︶︶୨୧︶︶⊹︶︶⊹︶︶୨୧︶︶⊹\n「 ꕤ 」 ¡Hola! *${userName}*, Soy *${config.botName}*, Aquí tienes la lista de comandos.\n> Para Ver Tu Perfil Usa *${p}perfil* 𝜗ৎ\n\n‿    ׅ   𝆬     ε❤︎︭з   𝆬     ׅ      ‿\n\nׅ  ׄ  ✿ *Modo* » Premium\nׅ  ׄ  ✿ *Desarrollador* » ${config.devName}\nׅ  ׄ  ✿ *Moneda* » ${config.coin || '¥enes'}\nׅ  ׄ  ✿ *Comandos* » ${Object.keys(global.plugins || {}).length}\nׅ  ׄ  ✿ *Link* » ${link}\n\n‿    ׅ   𝆬     ε❤︎︭з   𝆬     ׅ      ‿\n${String.fromCharCode(8206).repeat(4000)}\n\n⋆｡ﾟ☁︎ ｡° *ᴄᴏᴍ꯭ᴀ꯭ɴᴅᴏs* ﾟ｡˚₊ 𓂃\n`;
+            let menu = `︶⊹︶︶୨୧︶︶⊹︶︶⊹︶︶୨୧︶︶⊹\n「 ꕤ 」 ¡Hola! *${userName}*, Soy *${config.botName}*, Aquí tienes la lista de comandos.\n> Para Ver Tu Perfil Usa *${p}perfil* 𝜗ৎ\n\n‿    ׅ   𝆬     ε❤︎︭з   𝆬     ׅ      ‿\n\nׅ  ׄ  ✿ *Modo* » Premium\nׅ  ׄ  ✿ *Desarrollador* » ${config.devName}\nׅ  ׄ  ✿ *Moneda* » ${config.coin || '¥enes'}\nׅ  ׄ  ✿ *Comandos* » ${Object.keys(global.plugins || {}).filter(name => {
+                const plugin = global.plugins[name];
+                return plugin?.command && plugin.owner !== true;
+            }).length}\nׅ  ׄ  ✿ *Link* » ${link}\n\n‿    ׅ   𝆬     ε❤︎︭з   𝆬     ׅ      ‿\n${String.fromCharCode(8206).repeat(4000)}\n\n⋆｡ﾟ☁︎ ｡° *ᴄᴏᴍ꯭ᴀ꯭ɴᴅᴏs* ﾟ｡˚₊ 𓂃\n`;
 
             const categoryArg = args[0]?.toLowerCase();
 
@@ -57,7 +60,7 @@ export default {
                 return msg.reply(`《✤》 La categoría *${categoryArg}* no fue encontrada.`);
             }
 
-            const categoryOrder = ['main', 'info', 'download', 'profile', 'admin', 'stickers', 'tools', 'utils', 'fun', 'game', 'economy', 'gacha', 'anime', 'nsfw', 'otros'];
+            const categoryOrder = ['main', 'info', 'download', 'profile', 'admin', 'stickers', 'tools', 'utils', 'fun', 'game', 'economy', 'gacha', 'anime', 'nsfw', 'otros', 'logo'];
             const sortedCategories = Object.keys(categories).sort((a, b) => {
                 const indexA = categoryOrder.indexOf(a);
                 const indexB = categoryOrder.indexOf(b);
@@ -82,7 +85,8 @@ export default {
                 'gacha': '🎴',
                 'anime': '🧈',
                 'nsfw': '🍓',
-                'otros': '❀'
+                'otros': '❀',
+                'logo': '🍰'
             };
 
             for (const category of sortedCategories) {
