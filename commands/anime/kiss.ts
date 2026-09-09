@@ -1,7 +1,7 @@
 import { animeMaker } from '#anime';
 
 export default animeMaker({
-    command: ['kiss', 'beso'],
+    command: ['kiss', 'muak'],
     soloPhrases: {
         hombre: [
             'disfruta de su propio cariño',
