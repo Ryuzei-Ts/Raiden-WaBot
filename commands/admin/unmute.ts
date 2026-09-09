@@ -5,7 +5,7 @@ import { saveDB } from '#db';
 const normalizeNumber = (x: string) => String(x || "").split("@")[0].split(":")[0].replace(/[^\d]/g, "").trim();
 
 export default {
-    command: ['unmute', 'unsilenciar', 'desmutear'],
+    command: ['unmute', 'desmutear', 'unsilenciar'],
     description: 'Des-silencia a un usuario en el grupo',
     category: 'admin',
     group: true,
@@ -51,7 +51,7 @@ export default {
             }
 
             if (!targetJid || !targetNumber) {
-                return reply(`✿ Menciona a un usuario, responde a su mensaje o escribe su número para des-silenciarlo.`);
+                return reply(`✿ Menciona a un usuario, responde a su mensaje o escribe su número para desmutear.`);
             }
 
             const rawBotJid = sock.user?.id || sock.user?.jid || '';
@@ -60,11 +60,11 @@ export default {
             const senderBase = normalizeNumber(realSender);
 
             if (targetBase === botBase) {
-                return reply(`✰ No puedes des-silenciar al bot.`);
+                return reply(`✰ No puedes desmutear al bot.`);
             }
 
             if (targetBase === senderBase) {
-                return reply(`✰ No puedes des-silenciarte a ti mismo.`);
+                return reply(`✰ No puedes desmutearte a ti mismo.`);
             }
 
             const metadata = await sock.groupMetadata(chat).catch(() => null);
@@ -82,18 +82,18 @@ export default {
                 const pId = normalizeNumber(targetParticipant.id);
                 const pPhone = normalizeNumber(targetParticipant.phoneNumber);
                 if (pId === botBase || pPhone === botBase) {
-                    return reply(`✰ No puedes des-silenciar al bot.`);
+                    return reply(`✰ No puedes desmutear al bot.`);
                 }
             }
 
             const resolvedBase = targetParticipant ? normalizeNumber(targetParticipant.id) : targetBase;
             const ownerSet = config.owner;
             if (ownerSet instanceof Set && (ownerSet.has(targetBase) || ownerSet.has(resolvedBase))) {
-                return reply(`✰ No puedes des-silenciar a un Owner del bot.`);
+                return reply(`✰ No puedes desmutear a un Owner del bot.`);
             }
 
             if (targetParticipant?.admin === 'superadmin' || metadata?.owner === targetJid || metadata?.owner === targetParticipant?.id) {
-                return reply(`✰ No puedes des-silenciar al creador/superadmin del grupo.`);
+                return reply(`✰ No puedes desmutear al creador/superadmin del grupo.`);
             }
 
             const dbData = (global as any).db?.data;
@@ -118,7 +118,7 @@ export default {
             saveDB(chat);
 
             return sock.sendMessage(chat, {
-                text: `✰ El usuario @${displayName} ha sido des-silenciado en este grupo.`,
+                text: `✰ El usuario @${displayName} ha sido desmuteado en este grupo.`,
                 mentions: [targetJid]
             }, { quoted: m });
 
