@@ -23,38 +23,16 @@ export default {
                 return reply(`✰ No hay usuarios silenciados en este grupo.`);
             }
 
-            const metadata = await sock.groupMetadata(chat).catch(() => null);
-            const participants = metadata?.participants || [];
-
-            let mutedList = '';
+            let listText = `✐ Lista de usuarios silenciados (${chatDb.muteds.length}):\n\n`;
             const mentions: string[] = [];
 
-            for (const mutedNumber of chatDb.muteds) {
-                const participant = participants.find((p: any) => {
-                    const pId = normalizeNumber(p.id);
-                    const pPhone = normalizeNumber(p.phoneNumber);
-                    return pId === mutedNumber || pPhone === mutedNumber;
-                });
-
-                let jid: string;
-                let displayName: string;
-
-                if (participant) {
-                    jid = participant.id;
-                    displayName = participant.name || participant.notify || mutedNumber;
-                } else {
-                    jid = mutedNumber + '@s.whatsapp.net';
-                    displayName = mutedNumber;
-                }
-
-                mutedList += `✰ @${displayName}\n`;
-                mentions.push(jid);
+            for (const user of chatDb.muteds) {
+                listText += `> @${user}\n`;
+                mentions.push(user + '@s.whatsapp.net');
             }
 
-            const text = `✰ *LISTA DE SILENCIADOS*\n\n${mutedList}\nTotal: ${chatDb.muteds.length} usuario(s)`;
-
             return sock.sendMessage(chat, {
-                text: text,
+                text: listText,
                 mentions: mentions
             }, { quoted: m });
 
