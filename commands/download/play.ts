@@ -91,7 +91,7 @@ const extractDownloadUrl = (data: any): string => {
     return candidate;
 };
 
-const fetchWithTimeout = async (url: string, timeoutMs = 2000): Promise<any> => {
+const fetchWithTimeout = async (url: string, timeoutMs = 3000): Promise<any> => {
     try {
         const res = await axios.get(url, {
             timeout: timeoutMs,
@@ -122,7 +122,7 @@ const fetchWithTimeout = async (url: string, timeoutMs = 2000): Promise<any> => 
     }
 };
 
-const getDownloadStreamSequential = async (link: string, msgId?: string): Promise<{ url: string; isVideo: boolean }> => {
+const getAudioStream = async (link: string): Promise<{ url: string; isVideo: boolean }> => {
     const encoded = encodeURIComponent(link);
     
     const apis = [
@@ -133,51 +133,17 @@ const getDownloadStreamSequential = async (link: string, msgId?: string): Promis
         { url: `https://api.stellarwa.xyz/dl/ytmp3?url=${encoded}&key=${STELLAR_KEY}`, isVideo: false }
     ];
 
-    const results = await Promise.all(apis.map(async (api, index) => {
-        const startTime = performance.now();
+    for (const api of apis) {
         try {
-            const data = await fetchWithTimeout(api.url, 2000);
-            const endTime = performance.now();
-            const responseTime = endTime - startTime;
-            
+            const data = await fetchWithTimeout(api.url, 3000);
             const dlUrl = extractDownloadUrl(data);
-            return { 
-                success: true, 
-                url: dlUrl, 
-                isVideo: api.isVideo, 
-                index,
-                responseTime 
-            };
-        } catch (error: any) {
-            const endTime = performance.now();
-            const responseTime = endTime - startTime;
-            return { 
-                success: false, 
-                error: error.message || String(error),
-                index,
-                responseTime
-            };
+            return { url: dlUrl, isVideo: api.isVideo };
+        } catch (error) {
+            continue;
         }
-    }));
-
-    const successfulResults = results
-        .filter(r => r.success && r.url)
-        .sort((a, b) => (a.responseTime || Infinity) - (b.responseTime || Infinity));
-    
-    if (successfulResults.length > 0) {
-        const best = successfulResults[0];
-        if (msgId) {
-            emitProgress(msgId, 'api_found', { 
-                apiIndex: best.index + 1, 
-                responseTime: `${best.responseTime?.toFixed(2)}ms`,
-                totalApis: apis.length 
-            });
-        }
-        return { url: best.url, isVideo: best.isVideo };
     }
-
-    const errors = results.filter(r => !r.success).map(r => r.error).filter(Boolean);
-    throw new Error(`Todas las APIs fallaron: ${errors.join(', ')}`);
+    
+    throw new Error('No se pudo obtener el audio de ninguna API');
 };
 
 export default {
@@ -227,17 +193,13 @@ export default {
                 }, { quoted: msg });
             }
 
-            emitProgress(msgId, 'media_found', { title, duration, channel, videoUrl });
-
             const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Canal* » ${channel}\nׅ  ׄ  ✿ *Vistas* » ${formatViews(views)}\nׅ  ׄ  ✿ *Tiempo* » ${duration}\nׅ  ׄ  ✿ *Link* » ${videoUrl}\n\nׅ  ׄ  ✿ *Descargando audio...*`;
 
-            emitProgress(msgId, 'fetching_thumbnail');
-
-            const streamPromise = getDownloadStreamSequential(videoUrl, msgId);
-            
             let thumbBuffer = null;
             if (thumb) {
-                try { thumbBuffer = await getBufferFast(thumb, 3000); } catch {}
+                try { 
+                    thumbBuffer = await getBufferFast(thumb, 3000); 
+                } catch {}
             }
 
             if (thumbBuffer) {
@@ -246,9 +208,9 @@ export default {
                 await sock.sendMessage(chat, { text: caption }, { quoted: msg });
             }
 
-            emitProgress(msgId, 'thumbnail_sent');
+            emitProgress(msgId, 'media_found', { title, duration, channel, videoUrl });
 
-            const streamData = await streamPromise;
+            const streamData = await getAudioStream(videoUrl);
 
             let audioBuffer: Buffer;
             if (streamData.isVideo) {
