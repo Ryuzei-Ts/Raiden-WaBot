@@ -27,7 +27,7 @@ export default {
             const participants = metadata?.participants || [];
 
             let mutedList = '';
-            let mentions: string[] = [];
+            const mentions: string[] = [];
 
             for (const mutedNumber of chatDb.muteds) {
                 const participant = participants.find((p: any) => {
@@ -42,11 +42,13 @@ export default {
                     mutedList += `✰ @${name}\n`;
                     mentions.push(jid);
                 } else {
-                    mutedList += `✰ ${mutedNumber}\n`;
+                    const jid = mutedNumber + '@s.whatsapp.net';
+                    mutedList += `✰ @${mutedNumber}\n`;
+                    mentions.push(jid);
                 }
             }
 
-            const text = `✰ *LISTA DE SILENCIADOS*\n\n${mutedList}\n\nTotal: ${chatDb.muteds.length} usuario(s)`;
+            const text = `✰ *LISTA DE SILENCIADOS*\n\n${mutedList}\nTotal: ${chatDb.muteds.length} usuario(s)`;
 
             return sock.sendMessage(chat, {
                 text: text,
