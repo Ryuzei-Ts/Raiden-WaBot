@@ -139,15 +139,12 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         processedMsgIds.set(msgId, true);
     }
 
-    const msg = serialize(sock, rawMsg);
-    if (!msg || !msg.body) return;
-
-    const chat = msg.chat || msg.from || rawMsg?.key?.remoteJid;
+    const chat = rawMsg?.key?.remoteJid;
     if (!chat) return;
 
-    let realJidResult = msg.sender;
+    let realJidResult = rawMsg?.key?.participant || rawMsg?.participant || rawMsg?.key?.fromMe ? sock.user?.id : chat;
     try {
-        realJidResult = UserJid(sock, chat, msg.sender) || msg.sender;
+        realJidResult = UserJid(sock, chat, realJidResult) || realJidResult;
     } catch {}
 
     const normalizedSender = normalizeNumber(realJidResult);
@@ -157,7 +154,7 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         ? normalizedSender.replace(/^521/, '52') 
         : (normalizedSender.startsWith('52') ? normalizedSender.replace(/^52/, '521') : normalizedSender);
 
-    const isGroup = msg.isGroup;
+    const isGroup = chat.endsWith('@g.us');
     const groupMetadata = isGroup ? await getGroupMetadata(sock, chat) : null;
 
     const ownerConfig = (config as any)?.owner;
@@ -191,10 +188,16 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
     const currentChatDb = dbData?.chats?.[chat] || {};
 
     if (isGroup && chat && Array.isArray(currentChatDb.muteds)) {
-        if (currentChatDb.muteds.includes(normalizedSender) && !isOwner) {
-            sock.sendMessage(chat, { delete: rawMsg.key }).catch(() => null);
+        if ((currentChatDb.muteds.includes(normalizedSender) || currentChatDb.muteds.includes(altSender)) && !isOwner) {
+            if (isBotAdmins) {
+                sock.sendMessage(chat, { delete: rawMsg.key }).catch(() => null);
+            }
+            return;
         }
     }
+
+    const msg = serialize(sock, rawMsg);
+    if (!msg || !msg.body) return;
 
     const prefix = (config as any)?.prefix || '.';
     const isCommand = msg.body.charCodeAt(0) === prefix.charCodeAt(0);
