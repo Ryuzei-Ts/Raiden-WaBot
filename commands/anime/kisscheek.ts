@@ -1,7 +1,7 @@
 import { animeMaker } from '#anime';
 
 export default animeMaker({
-    command: ['kisscheek', 'beso2'],
+    command: ['kisscheek', 'beso'],
     soloPhrases: {
         hombre: [
             'besa su propia mejilla',
