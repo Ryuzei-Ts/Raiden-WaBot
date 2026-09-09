@@ -2,12 +2,7 @@ import { UserJid } from '#simple';
 import config from '#config';
 import { saveDB } from '#db';
 
-const normalizeNumber = (x: string) => {
-    if (!x) return '';
-    let cleaned = String(x).split('@')[0].split(':').pop() || '';
-    cleaned = cleaned.replace(/[^\d]/g, '');
-    return cleaned;
-};
+const normalizeNumber = (x: string) => String(x || "").split("@")[0].split(":")[0].replace(/[^\d]/g, "").trim();
 
 export default {
     command: ['mute', 'silenciar', 'mutear'],
@@ -59,8 +54,46 @@ export default {
                 return reply(`✿ Menciona a un usuario, responde a su mensaje o escribe su número para silenciarlo.`);
             }
 
-            if (normalizeNumber(targetJid) === normalizeNumber(realSender)) {
+            const rawBotJid = sock.user?.id || sock.user?.jid || '';
+            const botBase = normalizeNumber(rawBotJid);
+            const targetBase = normalizeNumber(targetJid);
+            const senderBase = normalizeNumber(realSender);
+
+            if (targetBase === botBase) {
+                return reply(`✰ No puedes silenciar al bot.`);
+            }
+
+            if (targetBase === senderBase) {
                 return reply(`✰ No puedes silenciarte a ti mismo.`);
+            }
+
+            const metadata = await sock.groupMetadata(chat).catch(() => null);
+            const participants = metadata?.participants || [];
+            
+            const targetParticipant = participants.find((p: any) => {
+                const pId = normalizeNumber(p.id);
+                const pLid = normalizeNumber(p.lid);
+                const pPhone = normalizeNumber(p.phoneNumber);
+                return pId === targetBase || pLid === targetBase || pPhone === targetBase ||
+                       (pId && (pId.endsWith(targetBase) || targetBase.endsWith(pId)));
+            });
+
+            if (targetParticipant) {
+                const pId = normalizeNumber(targetParticipant.id);
+                const pPhone = normalizeNumber(targetParticipant.phoneNumber);
+                if (pId === botBase || pPhone === botBase) {
+                    return reply(`✰ No puedes silenciar al bot.`);
+                }
+            }
+
+            const resolvedBase = targetParticipant ? normalizeNumber(targetParticipant.id) : targetBase;
+            const ownerSet = config.owner;
+            if (ownerSet instanceof Set && (ownerSet.has(targetBase) || ownerSet.has(resolvedBase))) {
+                return reply(`✰ No puedes silenciar a un Owner del bot.`);
+            }
+
+            if (targetParticipant?.admin === 'superadmin' || metadata?.owner === targetJid || metadata?.owner === targetParticipant?.id) {
+                return reply(`✰ No puedes silenciar al creador/superadmin del grupo.`);
             }
 
             const dbData = (global as any).db?.data;
