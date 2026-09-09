@@ -4,7 +4,7 @@ import config from '#config';
 export default {
     command: ['notify', 'tag', 'n', 'avisar', 'hidetag'],
     description: 'Notifica y menciona a todos los miembros del grupo con un texto, imagen o mensaje citado.',
-    category: 'group',
+    category: 'admin',
     group: true,
     admin: true,
     run: async ({ chat, sock, args, msg }: any) => {
