@@ -31,7 +31,7 @@ const emitProgress = (msgId: string, step: string, extraData: Record<string, any
     });
 };
 
-const getBuffer = async (url: string, timeoutMs = 30000): Promise<Buffer> => {
+const getBuffer = async (url: string, timeoutMs = 15000): Promise<Buffer> => {
     try {
         const res = await axios.get(url, {
             responseType: 'arraybuffer',
@@ -91,15 +91,25 @@ const extractDownloadUrl = (data: any): string => {
     return candidate;
 };
 
-const fetchWithTimeout = async (url: string, timeoutMs = 10000): Promise<any> => {
-    const res = await axios.get(url, {
-        timeout: timeoutMs,
-        headers: { 
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'application/json, text/plain, */*' 
+const fetchWithTimeout = async (url: string, timeoutMs = 4000): Promise<any> => {
+    try {
+        const res = await axios.get(url, {
+            timeout: timeoutMs,
+            headers: { 
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/json, text/plain, */*' 
+            }
+        });
+        return res.data;
+    } catch (error: any) {
+        if (error.response) {
+            const status = error.response.status;
+            if (status === 403 || status === 404 || status === 429 || status >= 500) {
+                throw new Error(`API error ${status}`);
+            }
         }
-    });
-    return res.data;
+        throw error;
+    }
 };
 
 const getDownloadStreamSequential = async (link: string, msgId?: string): Promise<{ url: string; isVideo: boolean }> => {
@@ -114,28 +124,56 @@ const getDownloadStreamSequential = async (link: string, msgId?: string): Promis
         { url: `https://api.stellarwa.xyz/dl/ytmp3?url=${encoded}&key=${STELLAR_KEY}`, isVideo: false }
     ];
 
-    const promises = apis.map((api, index) => 
-        fetchWithTimeout(api.url, 8000)
-            .then(data => ({ data, isVideo: api.isVideo, index }))
-            .catch(err => ({ error: err, index }))
-    );
+    // Ejecutar todas las APIs en paralelo con timeouts agresivos (microsegundos)
+    const promises = apis.map(async (api, index) => {
+        try {
+            const startTime = performance.now();
+            const data = await fetchWithTimeout(api.url, 3000);
+            const endTime = performance.now();
+            const responseTime = endTime - startTime;
+            
+            try {
+                const dlUrl = extractDownloadUrl(data);
+                return { 
+                    success: true, 
+                    url: dlUrl, 
+                    isVideo: api.isVideo, 
+                    index,
+                    responseTime 
+                };
+            } catch (extractError) {
+                return { success: false, error: extractError, index, responseTime: performance.now() - startTime };
+            }
+        } catch (error: any) {
+            return { success: false, error, index };
+        }
+    });
 
     const results = await Promise.all(promises);
     
-    for (const result of results) {
-        if (result.data) {
-            try {
-                const dlUrl = extractDownloadUrl(result.data);
-                return { url: dlUrl, isVideo: result.isVideo };
-            } catch {}
+    // Ordenar por tiempo de respuesta y elegir la más rápida que funcionó
+    const successfulResults = results
+        .filter(r => r.success && r.url)
+        .sort((a, b) => (a.responseTime || Infinity) - (b.responseTime || Infinity));
+    
+    if (successfulResults.length > 0) {
+        const best = successfulResults[0];
+        if (msgId) {
+            emitProgress(msgId, 'api_found', { 
+                apiIndex: best.index + 1, 
+                responseTime: `${best.responseTime?.toFixed(2)}ms`,
+                totalApis: apis.length 
+            });
         }
+        return { url: best.url, isVideo: best.isVideo };
     }
 
+    // Si todas fallaron, intentar secuencialmente con reintentos
     for (let i = 0; i < apis.length; i++) {
         const api = apis[i];
         if (msgId) emitProgress(msgId, 'requesting_api', { apiIndex: i + 1, totalApis: apis.length });
         try {
-            const data = await fetchWithTimeout(api.url);
+            const data = await fetchWithTimeout(api.url, 4000);
             const dlUrl = extractDownloadUrl(data);
             return { url: dlUrl, isVideo: api.isVideo };
         } catch (err: any) {
