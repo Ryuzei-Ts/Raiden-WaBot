@@ -31,53 +31,52 @@ export default {
             const enableValues = ['on', '1', 'enable', 'encendido', 'encender', 'activar'];
             const disableValues = ['off', '0', 'disable', 'apagado', 'apagar', 'desactivar'];
 
-            const titulo = 'ANTILINK';
             const estado = chatDb.antilinks ? 'Activado' : 'Desactivado';
-            const nombreBonito = 'el antilink';
-            const normalizedKey = command;
-            const dev = `> *${config.botName || 'Bot'}*`;
+            const estadoIcono = chatDb.antilinks ? '✓' : '✗';
+
+            const menuText = 
+                `❒ Un administrador puede activar o desactivar el antilink utilizando:\n\n` +
+                `✐ _Activar_ » *${usedPrefix + command} on*\n` +
+                `✐ _Desactivar_ » *${usedPrefix + command} off*\n\n` +
+                `✦ Estado actual: *${estadoIcono} ${estado}*\n` +
+                `> Si el *antilink* está activado, *${config.botName || 'Bot'}﹒* expulsará a todos los usuarios que envíen enlaces de otros grupos.`;
 
             if (!input) {
-                const menuText = 
-                    `*✩ ${titulo} (✿❛◡❛)*\n` +
-                    `❒ *Estado ›* ${estado}\n\n` +
-                    `ꕥ Un administrador puede activar o desactivar ${nombreBonito} utilizando:\n\n` +
-                    `> ● _Habilitar ›_ *${usedPrefix + normalizedKey} on*\n` +
-                    `> ● _Deshabilitar ›_ *${usedPrefix + normalizedKey} off*\n\n${dev}`;
-
                 return reply(menuText);
             }
 
             if (enableValues.includes(input)) {
                 if (chatDb.antilinks) {
-                    return reply(`✰ El Antilink ya estaba activado.`);
+                    return reply(`✦ El *antilink* ya estaba activado.`);
                 }
                 chatDb.antilinks = true;
                 saveDB(chat);
-                return reply(`✰ El sistema *Antilink* ha sido *activado*. Los enlaces externos ya no están permitidos.`);
+                return reply(`✐ ¡Has *activado* el *antilink*!`);
             }
 
             if (disableValues.includes(input)) {
                 if (!chatDb.antilinks) {
-                    return reply(`✰ El Antilink ya estaba desactivado.`);
+                    return reply(`✦ El *antilink* ya estaba desactivado.`);
                 }
                 chatDb.antilinks = false;
                 saveDB(chat);
-                return reply(`✰ El sistema *Antilink* ha sido *desactivado*.`);
+                return reply(`✐ ¡Has *desactivado* el *antilink*!`);
             }
 
-            const errorText = 
-                `*✩ ${titulo} (✿❛◡❛)*\n` +
-                `❒ *Estado ›* ${estado}\n\n` +
-                `ꕥ Opción no válida. Un administrador puede utilizar:\n\n` +
-                `> ● _Habilitar ›_ *${usedPrefix + normalizedKey} on*\n` +
-                `> ● _Deshabilitar ›_ *${usedPrefix + normalizedKey} off*\n\n${dev}`;
-
-            return reply(errorText);
+            return reply(menuText);
 
         } catch (e) {
             console.error('Error en antilink:', e);
-            return reply(`✿ Ocurrió un error al cambiar la configuración del AntiLink.`);
+            const estado = (global as any).db?.data?.chats?.[chat]?.antilinks ? 'Activado' : 'Desactivado';
+            const estadoIcono = (global as any).db?.data?.chats?.[chat]?.antilinks ? '✓' : '✗';
+            const menuText = 
+                `❒ Un administrador puede activar o desactivar el antilink utilizando:\n\n` +
+                `✐ _Activar_ » *${usedPrefix + command} on*\n` +
+                `✐ _Desactivar_ » *${usedPrefix + command} off*\n\n` +
+                `✦ Estado actual: *${estadoIcono} ${estado}*\n` +
+                `> Si el *antilink* está activado, *${config.botName || 'Bot'}﹒* expulsará a todos los usuarios que envíen enlaces de otros grupos.`;
+
+            return reply(menuText);
         }
     }
 };
