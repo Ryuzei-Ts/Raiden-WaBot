@@ -4,23 +4,26 @@ import config from '#config';
 import chalk from 'chalk';
 import { broadcast } from '#index';
 import { LRUCache } from 'lru-cache';
+import linkifyIt from 'linkify-it';
+
+const linkify = linkifyIt();
 
 const handlerConfig = (config as any)?.handler || {};
-const META_TTL_MS = handlerConfig.metaTtl || 300000;
-const MSG_TTL_MS = handlerConfig.msgTtl || 10000;
-const MAX_GROUP_CACHE = handlerConfig.maxGroupCache || 500;
-const MAX_PROCESSED_MSGS = handlerConfig.maxProcessedMsgs || 2000;
-const RATE_LIMIT_WINDOW_MS = handlerConfig.rateLimitWindow || 3000;
-const MAX_COMMANDS_PER_WINDOW = handlerConfig.maxCommandsPerWindow || 5;
+const metaTtlMs = handlerConfig.metaTtl || 300000;
+const msgTtlMs = handlerConfig.msgTtl || 10000;
+const maxGroupCache = handlerConfig.maxGroupCache || 500;
+const maxProcessedMsgs = handlerConfig.maxProcessedMsgs || 2000;
+const rateLimitWindowMs = handlerConfig.rateLimitWindow || 3000;
+const maxCmdsPerWin = handlerConfig.maxCommandsPerWindow || 5;
 
 const groupMetaCache = new LRUCache<string, { metadata: any; ts: number }>({
-    max: MAX_GROUP_CACHE,
-    ttl: META_TTL_MS,
+    max: maxGroupCache,
+    ttl: metaTtlMs,
 });
 
 const processedMsgIds = new LRUCache<string, boolean>({
-    max: MAX_PROCESSED_MSGS,
-    ttl: MSG_TTL_MS,
+    max: maxProcessedMsgs,
+    ttl: msgTtlMs,
 });
 
 const userRateLimits = new Map<string, { count: number; resetTime: number }>();
@@ -109,11 +112,11 @@ function checkRateLimit(sender: string): boolean {
     const now = Date.now();
     let record = userRateLimits.get(sender);
     if (!record || now > record.resetTime) {
-        userRateLimits.set(sender, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
+        userRateLimits.set(sender, { count: 1, resetTime: now + rateLimitWindowMs });
         return false;
     }
     record.count++;
-    return record.count > MAX_COMMANDS_PER_WINDOW;
+    return record.count > maxCmdsPerWin;
 }
 
 function logHandlerError(e: any): void {
@@ -140,20 +143,6 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
 
     const msg = serialize(sock, rawMsg);
     if (!msg || !msg.body) return;
-
-    const prefix = (config as any)?.prefix || '.';
-    if (msg.body.charCodeAt(0) !== prefix.charCodeAt(0)) return;
-
-    const bodyWithoutPrefix = msg.body.slice(prefix.length).trim();
-    if (!bodyWithoutPrefix) return;
-
-    const spaceIndex = bodyWithoutPrefix.indexOf(' ');
-    const rawCommand = spaceIndex === -1 ? bodyWithoutPrefix : bodyWithoutPrefix.slice(0, spaceIndex);
-    if (!rawCommand) return;
-
-    syncCommandMapIfNeeded();
-    const cmd = commandMap.get(rawCommand.toLowerCase()) || commandMap.get(normalizeString(rawCommand));
-    if (!cmd) return;
 
     const chat = msg.chat || msg.from || rawMsg?.key?.remoteJid;
     if (!chat) return;
@@ -184,21 +173,6 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         }); 
     }
 
-    if (cmd.owner && !isOwner) {
-        queueMicrotask(() => {
-            broadcast('security_event', {
-                type: 'unauthorized_access',
-                command: rawCommand,
-                sender: normalizedSender,
-                chat
-            });
-        });
-        return msg.reply('ׅ  ׄ  ✿ Este comando solo puede ser utilizado por el dueño del bot.');
-    }
-    if (cmd.group && !isGroup) {
-        return msg.reply('ׅ  ׄ  ✿ Este comando solo se puede usar en grupos.');
-    }
-
     let isAdmins = false;
     let isBotAdmins = false;
 
@@ -213,6 +187,59 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
             : (botBase.startsWith('52') ? botBase.replace(/^52/, '521') : botBase);
 
         isBotAdmins = adminSet.has(botBase) || adminSet.has(altBot);
+    }
+
+    const dbData = (global as any).db?.data;
+    const currentChatDb = dbData?.chats?.[chat] || {};
+
+    if (isGroup && chat && Array.isArray(currentChatDb.muteds)) {
+        if (currentChatDb.muteds.includes(normalizedSender) && !isOwner) {
+            sock.sendMessage(chat, { delete: rawMsg.key }).catch(() => null);
+        }
+    }
+
+    if (isGroup && chat && currentChatDb.antilinks) {
+        const detectedLinks = linkify.find(msg.body);
+        if (detectedLinks && detectedLinks.length > 0) {
+            if (!isOwner && !isAdmins && isBotAdmins) {
+                sock.sendMessage(chat, { delete: rawMsg.key }).catch(() => null);
+                sock.groupParticipantsUpdate(chat, [msg.sender], 'remove').catch(() => null);
+                sock.sendMessage(chat, {
+                    text: `✰ @${normalizedSender} fue eliminado por enviar un link.`,
+                    mentions: [msg.sender]
+                }).catch(() => null);
+                return;
+            }
+        }
+    }
+
+    const prefix = (config as any)?.prefix || '.';
+    if (msg.body.charCodeAt(0) !== prefix.charCodeAt(0)) return;
+
+    const bodyWithoutPrefix = msg.body.slice(prefix.length).trim();
+    if (!bodyWithoutPrefix) return;
+
+    const spaceIndex = bodyWithoutPrefix.indexOf(' ');
+    const rawCommand = spaceIndex === -1 ? bodyWithoutPrefix : bodyWithoutPrefix.slice(0, spaceIndex);
+    if (!rawCommand) return;
+
+    syncCommandMapIfNeeded();
+    const cmd = commandMap.get(rawCommand.toLowerCase()) || commandMap.get(normalizeString(rawCommand));
+    if (!cmd) return;
+
+    if (cmd.owner && !isOwner) {
+        queueMicrotask(() => {
+            broadcast('security_event', {
+                type: 'unauthorized_access',
+                command: rawCommand,
+                sender: normalizedSender,
+                chat
+            });
+        });
+        return msg.reply('ׅ  ׄ  ✿ Este comando solo puede ser utilizado por el dueño del bot.');
+    }
+    if (cmd.group && !isGroup) {
+        return msg.reply('ׅ  ׄ  ✿ Este comando solo se puede usar en grupos.');
     }
 
     if (cmd.admin && !isAdmins && !isOwner) {
@@ -231,7 +258,6 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
     }
 
     const cleanSender = normalizedSender + '@s.whatsapp.net';
-    const dbData = (global as any).db?.data;
 
     const rawArgs = spaceIndex === -1 ? [] : bodyWithoutPrefix.slice(spaceIndex + 1).trim().split(/ +/);
     const args = rawArgs.map(arg => arg.replace(/[&;|$`]/g, ''));
@@ -251,7 +277,7 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         chat,
         db: (global as any).db,
         user: dbData?.users?.[cleanSender] || {},
-        chatDb: dbData?.chats?.[chat] || {},
+        chatDb: currentChatDb,
         edit: (text: string, key: any) => {
             if (!key) return Promise.resolve(null);
             return sock.sendMessage(chat, { text, edit: key });
