@@ -142,7 +142,10 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
     const chat = rawMsg?.key?.remoteJid;
     if (!chat) return;
 
-    let realJidResult = rawMsg?.key?.participant || rawMsg?.participant || rawMsg?.key?.fromMe ? sock.user?.id : chat;
+    const isGroup = chat.endsWith('@g.us');
+    const groupMetadata = isGroup ? await getGroupMetadata(sock, chat) : null;
+
+    let realJidResult = rawMsg?.key?.participant || rawMsg?.participant || (rawMsg?.key?.fromMe ? sock.user?.id : chat);
     try {
         realJidResult = UserJid(sock, chat, realJidResult) || realJidResult;
     } catch {}
@@ -153,9 +156,6 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
     const altSender = normalizedSender.startsWith('521') 
         ? normalizedSender.replace(/^521/, '52') 
         : (normalizedSender.startsWith('52') ? normalizedSender.replace(/^52/, '521') : normalizedSender);
-
-    const isGroup = chat.endsWith('@g.us');
-    const groupMetadata = isGroup ? await getGroupMetadata(sock, chat) : null;
 
     const ownerConfig = (config as any)?.owner;
     let isOwner = false;
@@ -188,8 +188,13 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
     const currentChatDb = dbData?.chats?.[chat] || {};
 
     if (isGroup && chat && Array.isArray(currentChatDb.muteds)) {
-        if ((currentChatDb.muteds.includes(normalizedSender) || currentChatDb.muteds.includes(altSender)) && !isOwner) {
-            if (isBotAdmins) {
+        const isMuted = currentChatDb.muteds.some((m: string) => {
+            const cleanMuted = normalizeNumber(m);
+            return cleanMuted === normalizedSender || cleanMuted === altSender || m === realJidResult;
+        });
+
+        if (isMuted && !isOwner) {
+            if (isBotAdmins && rawMsg?.key) {
                 sock.sendMessage(chat, { delete: rawMsg.key }).catch(() => null);
             }
             return;
@@ -197,12 +202,12 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
     }
 
     const msg = serialize(sock, rawMsg);
-    if (!msg || !msg.body) return;
+    if (!msg) return;
 
     const prefix = (config as any)?.prefix || '.';
-    const isCommand = msg.body.charCodeAt(0) === prefix.charCodeAt(0);
+    const isCommand = msg.body ? msg.body.charCodeAt(0) === prefix.charCodeAt(0) : false;
 
-    if (isGroup && chat && currentChatDb.antilinks && !isCommand) {
+    if (isGroup && chat && currentChatDb.antilinks && !isCommand && msg.body) {
         const detectedLinks = linkify.find(msg.body);
         if (detectedLinks && detectedLinks.length > 0) {
             if (!isOwner && !isAdmins && isBotAdmins) {
@@ -217,7 +222,7 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         }
     }
 
-    if (!isCommand) return;
+    if (!isCommand || !msg.body) return;
 
     const bodyWithoutPrefix = msg.body.slice(prefix.length).trim();
     if (!bodyWithoutPrefix) return;
