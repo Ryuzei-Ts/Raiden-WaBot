@@ -25,23 +25,48 @@ function getRandomEmoji() {
     return emojis[Math.floor(Math.random() * emojis.length)];
 }
 
-function getGenderPhrases(phrases: any, senderGenre: string, targetGenre: string) {
-    const genderKey = senderGenre === 'Hombre' ? 'hombre' : 
-                     senderGenre === 'Mujer' ? 'mujer' : 'otro';
-    return phrases[genderKey] || phrases.otro;
+function getPhrases(phrases: any, gender: string, type: 'solo' | 'together') {
+    const genderKey = gender === 'Hombre' ? 'hombre' : 
+                     gender === 'Mujer' ? 'mujer' : 
+                     gender === 'Otro' ? 'otro' : 'indefinido';
+    
+    const target = type === 'solo' ? phrases.soloPhrases : phrases.togetherPhrases;
+    
+    if (target?.global) {
+        return target.global;
+    }
+    
+    if (target?.[genderKey]) {
+        return target[genderKey];
+    }
+    
+    if (target?.indefinido) {
+        return target.indefinido;
+    }
+    
+    if (target?.hombre) {
+        return target.hombre;
+    }
+    
+    return [];
 }
 
 interface AnimeOptions {
     command: string | string[];
+    description: string;
     soloPhrases: {
-        hombre: string[];
-        mujer: string[];
-        otro: string[];
+        global?: string[];
+        hombre?: string[];
+        mujer?: string[];
+        otro?: string[];
+        indefinido?: string[];
     };
-    togetherPhrases: {
-        hombre: string[];
-        mujer: string[];
-        otro: string[];
+    togetherPhrases?: {
+        global?: string[];
+        hombre?: string[];
+        mujer?: string[];
+        otro?: string[];
+        indefinido?: string[];
     };
 }
 
@@ -50,6 +75,7 @@ export function animeMaker(options: AnimeOptions) {
 
     return {
         command: cmdList,
+        description: options.description,
         category: 'anime',
         group: true,
         run: async ({ chat, m, sock, args, sender }: any) => {
@@ -82,14 +108,12 @@ export function animeMaker(options: AnimeOptions) {
 
                 const senderUser = global.db?.data?.users?.[senderJid] || {};
                 const senderName = m.pushName || senderUser.name || senderJid.split('@')[0];
-                const senderGenre = senderUser.genre || 'Hombre';
+                const senderGenre = senderUser.genre || 'Indefinido';
 
                 let targetName = 'Usuario';
-                let targetGenre = 'Hombre';
                 if (targetJid) {
                     const targetUser = global.db?.data?.users?.[targetJid] || {};
                     targetName = targetUser.name || targetJid.split('@')[0];
-                    targetGenre = targetUser.genre || 'Hombre';
                 }
 
                 let phrase: string;
@@ -97,11 +121,11 @@ export function animeMaker(options: AnimeOptions) {
 
                 if (targetJid && targetJid !== senderJid) {
                     mentions.push(targetJid);
-                    const phrases = getGenderPhrases(options.togetherPhrases, senderGenre, targetGenre);
+                    const phrases = getPhrases(options, senderGenre, 'together');
                     const randomPhrase = phrases[Math.floor(Math.random() * phrases.length)];
                     phrase = `\`${senderName}\` ${randomPhrase} \`${targetName}\` ${getRandomEmoji()}`;
                 } else {
-                    const phrases = getGenderPhrases(options.soloPhrases, senderGenre, targetGenre);
+                    const phrases = getPhrases(options, senderGenre, 'solo');
                     const randomPhrase = phrases[Math.floor(Math.random() * phrases.length)];
                     phrase = `\`${senderName}\` ${randomPhrase} ${getRandomEmoji()}`;
                 }
@@ -134,7 +158,7 @@ export function animeMaker(options: AnimeOptions) {
 
             } catch (error: any) {
                 return sock.sendMessage(chat, {
-                    text: `Error: ${error.message || 'Error desconocido'}`
+                    text: `❌ Error: ${error.message || 'Error desconocido'}`
                 }, { quoted: m });
             }
         }
