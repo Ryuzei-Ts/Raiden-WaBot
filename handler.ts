@@ -196,7 +196,10 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         }
     }
 
-    if (isGroup && chat && currentChatDb.antilinks) {
+    const prefix = (config as any)?.prefix || '.';
+    const isCommand = msg.body.charCodeAt(0) === prefix.charCodeAt(0);
+
+    if (isGroup && chat && currentChatDb.antilinks && !isCommand) {
         const detectedLinks = linkify.find(msg.body);
         if (detectedLinks && detectedLinks.length > 0) {
             if (!isOwner && !isAdmins && isBotAdmins) {
@@ -211,8 +214,7 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         }
     }
 
-    const prefix = (config as any)?.prefix || '.';
-    if (msg.body.charCodeAt(0) !== prefix.charCodeAt(0)) return;
+    if (!isCommand) return;
 
     const bodyWithoutPrefix = msg.body.slice(prefix.length).trim();
     if (!bodyWithoutPrefix) return;
