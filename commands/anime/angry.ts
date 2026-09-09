@@ -16,7 +16,7 @@ export default animeMaker({
             'respira hondo para calmarse'
         ],
         otro: [
-            'está enojade',
+            'está enojad@',
             'aprieta los puños con rabia',
             'su cara refleja ira',
             'respira hondo para calmarse'
