@@ -23,13 +23,15 @@ export default {
                 return reply(`✰ No hay usuarios silenciados en este grupo.`);
             }
 
-            let listText = `✐ Lista de usuarios silenciados (${chatDb.muteds.length}):\n\n`;
+            let listText = `✰ *LISTA DE SILENCIADOS*\n\n`;
             const mentions: string[] = [];
 
             for (const user of chatDb.muteds) {
-                listText += `> @${user}\n`;
+                listText += `✰ @${user}\n`;
                 mentions.push(user + '@s.whatsapp.net');
             }
+
+            listText += `\nTotal: ${chatDb.muteds.length} usuario(s)`;
 
             return sock.sendMessage(chat, {
                 text: listText,
