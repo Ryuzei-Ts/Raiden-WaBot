@@ -31,7 +31,7 @@ const emitProgress = (msgId: string, step: string, extraData: Record<string, any
     });
 };
 
-const getBuffer = async (url: string, timeoutMs = 15000): Promise<Buffer> => {
+const getBufferFast = async (url: string, timeoutMs = 5000): Promise<Buffer> => {
     try {
         const res = await axios.get(url, {
             responseType: 'arraybuffer',
@@ -91,7 +91,7 @@ const extractDownloadUrl = (data: any): string => {
     return candidate;
 };
 
-const fetchWithTimeout = async (url: string, timeoutMs = 3000): Promise<any> => {
+const fetchWithTimeout = async (url: string, timeoutMs = 2000): Promise<any> => {
     try {
         const res = await axios.get(url, {
             timeout: timeoutMs,
@@ -124,7 +124,6 @@ const fetchWithTimeout = async (url: string, timeoutMs = 3000): Promise<any> => 
 
 const getDownloadStreamSequential = async (link: string, msgId?: string): Promise<{ url: string; isVideo: boolean }> => {
     const encoded = encodeURIComponent(link);
-    let lastError = '';
     
     const apis = [
         { url: `https://api.starlights.uk/api/download/ytmp3?url=${encoded}`, isVideo: false },
@@ -137,7 +136,7 @@ const getDownloadStreamSequential = async (link: string, msgId?: string): Promis
     const results = await Promise.all(apis.map(async (api, index) => {
         const startTime = performance.now();
         try {
-            const data = await fetchWithTimeout(api.url, 2500);
+            const data = await fetchWithTimeout(api.url, 2000);
             const endTime = performance.now();
             const responseTime = endTime - startTime;
             
@@ -230,7 +229,7 @@ export default {
 
             emitProgress(msgId, 'media_found', { title, duration, channel, videoUrl });
 
-            const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Canal* » ${channel}\nׅ  ׄ  ✿ *Vistas* » ${formatViews(views)}\nׅ  ׄ  ✿ *Tiempo* » ${duration}\nׅ  ׄ  ✿ *Link* » ${videoUrl}\n\nׅ  ׄ  ✿ *¡Enviando audio, por favor espera!*`;
+            const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Canal* » ${channel}\nׅ  ׄ  ✿ *Vistas* » ${formatViews(views)}\nׅ  ׄ  ✿ *Tiempo* » ${duration}\nׅ  ׄ  ✿ *Link* » ${videoUrl}\n\nׅ  ׄ  ✿ *Descargando audio...*`;
 
             emitProgress(msgId, 'fetching_thumbnail');
 
@@ -238,7 +237,7 @@ export default {
             
             let thumbBuffer = null;
             if (thumb) {
-                try { thumbBuffer = await getBuffer(thumb, 8000); } catch {}
+                try { thumbBuffer = await getBufferFast(thumb, 3000); } catch {}
             }
 
             if (thumbBuffer) {
@@ -254,12 +253,12 @@ export default {
             let audioBuffer: Buffer;
             if (streamData.isVideo) {
                 emitProgress(msgId, 'downloading_video_stream');
-                const videoBuffer = await getBuffer(streamData.url, 25000);
+                const videoBuffer = await getBufferFast(streamData.url, 15000);
                 emitProgress(msgId, 'converting_video_to_audio');
                 audioBuffer = await convertVideoToAudioBuffer(videoBuffer);
             } else {
                 emitProgress(msgId, 'downloading_audio_stream');
-                audioBuffer = await getBuffer(streamData.url, 25000);
+                audioBuffer = await getBufferFast(streamData.url, 15000);
             }
 
             if (audioBuffer.length > MAX_FILE_SIZE_BYTES) {
