@@ -36,16 +36,19 @@ export default {
                     return pId === mutedNumber || pPhone === mutedNumber;
                 });
 
+                let jid: string;
+                let displayName: string;
+
                 if (participant) {
-                    const jid = participant.id;
-                    const displayName = participant.name || participant.notify || mutedNumber;
-                    mutedList += `✰ @${displayName}\n`;
-                    mentions.push(jid);
+                    jid = participant.id;
+                    displayName = participant.name || participant.notify || mutedNumber;
                 } else {
-                    const jid = mutedNumber + '@s.whatsapp.net';
-                    mutedList += `✰ @${mutedNumber}\n`;
-                    mentions.push(jid);
+                    jid = mutedNumber + '@s.whatsapp.net';
+                    displayName = mutedNumber;
                 }
+
+                mutedList += `✰ @${displayName}\n`;
+                mentions.push(jid);
             }
 
             const text = `✰ *LISTA DE SILENCIADOS*\n\n${mutedList}\nTotal: ${chatDb.muteds.length} usuario(s)`;
