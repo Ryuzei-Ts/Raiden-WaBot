@@ -4,9 +4,7 @@ import config from '#config';
 import chalk from 'chalk';
 import { broadcast } from '#index';
 import { LRUCache } from 'lru-cache';
-import linkifyIt from 'linkify-it';
-
-const linkify = linkifyIt();
+import * as linkify from 'linkifyjs';
 
 const handlerConfig = (config as any)?.handler || {};
 const metaTtlMs = handlerConfig.metaTtl || 300000;
