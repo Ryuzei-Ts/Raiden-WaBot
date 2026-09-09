@@ -3,9 +3,6 @@ import { spawn } from 'child_process';
 import axios from 'axios';
 import config from '#config';
 
-const LEMPI_KEYS = ['lem488', 'Midnight1', 'Midnight', 'lem691', 'lem678', 'lem957', 'lem293', 'lem144', 'lem459', 'lem501', 'lem141'];
-const STELLAR_KEY = 'Midnight';
-
 const MAX_DURATION_SECONDS = 7 * 60;
 const MAX_FILE_SIZE_BYTES = 30 * 1024 * 1024;
 
@@ -31,7 +28,7 @@ const emitProgress = (msgId: string, step: string, extraData: Record<string, any
     });
 };
 
-const getBufferFast = async (url: string, timeoutMs = 5000): Promise<Buffer> => {
+const getBufferFast = async (url: string, timeoutMs = 15000): Promise<Buffer> => {
     try {
         const res = await axios.get(url, {
             responseType: 'arraybuffer',
@@ -68,30 +65,12 @@ const convertVideoToAudioBuffer = (videoBuffer: Buffer): Promise<Buffer> => new 
 });
 
 const extractDownloadUrl = (data: any): string => {
-    const candidate = data?.dl || 
-                      data?.data?.dl_url || 
-                      data?.data?.download?.url || 
-                      data?.datos?.url || 
-                      data?.result?.download || 
-                      data?.result?.dl || 
-                      data?.result?.url || 
-                      data?.result?.link || 
-                      data?.data?.download || 
-                      data?.data?.dl || 
-                      data?.data?.url || 
-                      data?.data?.link || 
-                      (typeof data?.download === 'object' ? data?.download?.url || data?.download?.link : data?.download) || 
-                      (typeof data?.result === 'string' && data.result.startsWith('http') ? data.result : null) || 
-                      data?.url || 
-                      data?.link;
-
-    if (!candidate || typeof candidate !== 'string' || !candidate.startsWith('http')) {
-        throw new Error('Respuesta sin URL válida');
-    }
+    const candidate = data?.data?.download||data?.download||data?.dl||data?.data?.dl_url||data?.data?.download?.url||data?.datos?.url||data?.result?.download||data?.result?.dl||data?.result?.url||data?.result?.link||data?.data?.dl||data?.data?.url||data?.data?.link||(typeof data?.download==='object'?data?.download?.url||data?.download?.link:null)||(typeof data?.result==='string'&&data.result.startsWith('http')?data.result:null)||data?.url||data?.link;
+    if (!candidate || typeof candidate !== 'string' || !candidate.startsWith('http')) throw new Error('Respuesta sin URL válida');
     return candidate;
 };
 
-const fetchWithTimeout = async (url: string, timeoutMs = 3000): Promise<any> => {
+const fetchWithTimeout = async (url: string, timeoutMs = 5000): Promise<any> => {
     try {
         const res = await axios.get(url, {
             timeout: timeoutMs,
@@ -101,49 +80,34 @@ const fetchWithTimeout = async (url: string, timeoutMs = 3000): Promise<any> => 
             },
             validateStatus: () => true
         });
-        
-        if (res.status === 403 || res.status === 404 || res.status === 429 || res.status >= 500) {
-            throw new Error(`HTTP ${res.status}`);
-        }
-        
-        if (res.status !== 200) {
-            throw new Error(`HTTP ${res.status}`);
-        }
-        
+        if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
         return res.data;
     } catch (error: any) {
-        if (error.response) {
-            const status = error.response.status;
-            if (status === 403 || status === 404 || status === 429 || status >= 500) {
-                throw new Error(`HTTP ${status}`);
-            }
-        }
+        if (error.response) throw new Error(`HTTP ${error.response.status}`);
         throw error;
     }
 };
 
-const getAudioStream = async (link: string): Promise<{ url: string; isVideo: boolean }> => {
+const getAudioBufferFromApis = async (link: string): Promise<{ buffer: Buffer; isVideo: boolean }> => {
     const encoded = encodeURIComponent(link);
-    
     const apis = [
+        { url: `https://api.delirius.online/download/ytmp3?url=${encoded}`, isVideo: false },
         { url: `https://api.starlights.uk/api/download/ytmp3?url=${encoded}`, isVideo: false },
-        { url: `https://api.starlights.uk/api/download/ytmp3v2?url=${encoded}`, isVideo: false },
-        { url: `https://api.lempi.lat/dl/yta?url=${encoded}&apikey=${LEMPI_KEYS[0]}`, isVideo: false },
-        { url: `https://api.lempi.lat/dl/ytv?url=${encoded}&apikey=${LEMPI_KEYS[1]}`, isVideo: true },
-        { url: `https://api.stellarwa.xyz/dl/ytmp3?url=${encoded}&key=${STELLAR_KEY}`, isVideo: false }
+        { url: `https://api.starlights.uk/api/download/ytmp3v2?url=${encoded}`, isVideo: false }
     ];
 
     for (const api of apis) {
         try {
-            const data = await fetchWithTimeout(api.url, 3000);
+            const data = await fetchWithTimeout(api.url, 5000);
             const dlUrl = extractDownloadUrl(data);
-            return { url: dlUrl, isVideo: api.isVideo };
-        } catch (error) {
+            const buffer = await getBufferFast(dlUrl, 20000);
+            return { buffer, isVideo: api.isVideo };
+        } catch {
             continue;
         }
     }
     
-    throw new Error('No se pudo obtener el audio de ninguna API');
+    throw new Error('No se pudo descargar el audio desde ninguna API disponible');
 };
 
 export default {
@@ -210,17 +174,15 @@ export default {
 
             emitProgress(msgId, 'media_found', { title, duration, channel, videoUrl });
 
-            const streamData = await getAudioStream(videoUrl);
+            emitProgress(msgId, 'downloading_audio_stream');
+            const streamData = await getAudioBufferFromApis(videoUrl);
 
             let audioBuffer: Buffer;
             if (streamData.isVideo) {
-                emitProgress(msgId, 'downloading_video_stream');
-                const videoBuffer = await getBufferFast(streamData.url, 15000);
                 emitProgress(msgId, 'converting_video_to_audio');
-                audioBuffer = await convertVideoToAudioBuffer(videoBuffer);
+                audioBuffer = await convertVideoToAudioBuffer(streamData.buffer);
             } else {
-                emitProgress(msgId, 'downloading_audio_stream');
-                audioBuffer = await getBufferFast(streamData.url, 15000);
+                audioBuffer = streamData.buffer;
             }
 
             if (audioBuffer.length > MAX_FILE_SIZE_BYTES) {
