@@ -13,6 +13,7 @@
     "#simple": "./lib/simple.ts",
     "#sticker": "./lib/stickers.ts",
     "#db": "./lib/database.ts",
+    "#anime": "./lib/anime.ts",
     "#logomaker": "./lib/logomaker.ts",
     "#handler": "./handler.ts",
     "#index": "./index.ts"
