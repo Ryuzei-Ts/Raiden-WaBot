@@ -8,11 +8,24 @@ export default {
     group: true,
     admin: true,
     botAdmin: true,
-    run: async ({ chat, m, sock, args, usedPrefix, command }: any) => {
-        const reply = (txt: string) => sock.sendMessage(chat, { text: txt }, { quoted: m });
+    run: async (ctx: any) => {
+        const { chat, m, sock, args, usedPrefix, command } = ctx;
+
+        const reply = (txt: string) => {
+            if (typeof m.reply === 'function') {
+                return m.reply(txt);
+            }
+            return sock.sendMessage(chat, { text: txt }, { quoted: m });
+        };
 
         try {
-            const chatDb = (global as any).db?.data?.chats?.[chat] ||= {};
+            const dbData = (global as any).db?.data;
+            if (!dbData) return reply('✿ Error: La base de datos no está inicializada.');
+
+            if (!dbData.chats) dbData.chats = {};
+            if (!dbData.chats[chat]) dbData.chats[chat] = {};
+
+            const chatDb = dbData.chats[chat];
             const input = args[0]?.toLowerCase()?.trim();
 
             const enableValues = ['on', '1', 'enable', 'encendido', 'encender', 'activar'];
@@ -29,8 +42,8 @@ export default {
                     `*✩ ${titulo} (✿❛◡❛)*\n` +
                     `❒ *Estado ›* ${estado}\n\n` +
                     `ꕥ Un administrador puede activar o desactivar ${nombreBonito} utilizando:\n\n` +
-                    `> ● _Habilitar ›_ *${usedPrefix + normalizedKey} enable*\n` +
-                    `> ● _Deshabilitar ›_ *${usedPrefix + normalizedKey} disable*\n\n${dev}`;
+                    `> ● _Habilitar ›_ *${usedPrefix + normalizedKey} on*\n` +
+                    `> ● _Deshabilitar ›_ *${usedPrefix + normalizedKey} off*\n\n${dev}`;
 
                 return reply(menuText);
             }
@@ -57,8 +70,8 @@ export default {
                 `*✩ ${titulo} (✿❛◡❛)*\n` +
                 `❒ *Estado ›* ${estado}\n\n` +
                 `ꕥ Opción no válida. Un administrador puede utilizar:\n\n` +
-                `> ● _Habilitar ›_ *${usedPrefix + normalizedKey} enable*\n` +
-                `> ● _Deshabilitar ›_ *${usedPrefix + normalizedKey} disable*\n\n${dev}`;
+                `> ● _Habilitar ›_ *${usedPrefix + normalizedKey} on*\n` +
+                `> ● _Deshabilitar ›_ *${usedPrefix + normalizedKey} off*\n\n${dev}`;
 
             return reply(errorText);
 
