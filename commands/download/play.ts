@@ -91,21 +91,31 @@ const extractDownloadUrl = (data: any): string => {
     return candidate;
 };
 
-const fetchWithTimeout = async (url: string, timeoutMs = 4000): Promise<any> => {
+const fetchWithTimeout = async (url: string, timeoutMs = 3000): Promise<any> => {
     try {
         const res = await axios.get(url, {
             timeout: timeoutMs,
             headers: { 
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'application/json, text/plain, */*' 
-            }
+            },
+            validateStatus: () => true
         });
+        
+        if (res.status === 403 || res.status === 404 || res.status === 429 || res.status >= 500) {
+            throw new Error(`HTTP ${res.status}`);
+        }
+        
+        if (res.status !== 200) {
+            throw new Error(`HTTP ${res.status}`);
+        }
+        
         return res.data;
     } catch (error: any) {
         if (error.response) {
             const status = error.response.status;
             if (status === 403 || status === 404 || status === 429 || status >= 500) {
-                throw new Error(`API error ${status}`);
+                throw new Error(`HTTP ${status}`);
             }
         }
         throw error;
@@ -124,34 +134,31 @@ const getDownloadStreamSequential = async (link: string, msgId?: string): Promis
         { url: `https://api.stellarwa.xyz/dl/ytmp3?url=${encoded}&key=${STELLAR_KEY}`, isVideo: false }
     ];
 
-    // Ejecutar todas las APIs en paralelo con timeouts agresivos (microsegundos)
-    const promises = apis.map(async (api, index) => {
+    const results = await Promise.all(apis.map(async (api, index) => {
         try {
             const startTime = performance.now();
-            const data = await fetchWithTimeout(api.url, 3000);
+            const data = await fetchWithTimeout(api.url, 2500);
             const endTime = performance.now();
             const responseTime = endTime - startTime;
             
-            try {
-                const dlUrl = extractDownloadUrl(data);
-                return { 
-                    success: true, 
-                    url: dlUrl, 
-                    isVideo: api.isVideo, 
-                    index,
-                    responseTime 
-                };
-            } catch (extractError) {
-                return { success: false, error: extractError, index, responseTime: performance.now() - startTime };
-            }
+            const dlUrl = extractDownloadUrl(data);
+            return { 
+                success: true, 
+                url: dlUrl, 
+                isVideo: api.isVideo, 
+                index,
+                responseTime 
+            };
         } catch (error: any) {
-            return { success: false, error, index };
+            return { 
+                success: false, 
+                error: error.message || String(error),
+                index,
+                responseTime: performance.now() - startTime
+            };
         }
-    });
+    }));
 
-    const results = await Promise.all(promises);
-    
-    // Ordenar por tiempo de respuesta y elegir la más rápida que funcionó
     const successfulResults = results
         .filter(r => r.success && r.url)
         .sort((a, b) => (a.responseTime || Infinity) - (b.responseTime || Infinity));
@@ -168,19 +175,8 @@ const getDownloadStreamSequential = async (link: string, msgId?: string): Promis
         return { url: best.url, isVideo: best.isVideo };
     }
 
-    // Si todas fallaron, intentar secuencialmente con reintentos
-    for (let i = 0; i < apis.length; i++) {
-        const api = apis[i];
-        if (msgId) emitProgress(msgId, 'requesting_api', { apiIndex: i + 1, totalApis: apis.length });
-        try {
-            const data = await fetchWithTimeout(api.url, 4000);
-            const dlUrl = extractDownloadUrl(data);
-            return { url: dlUrl, isVideo: api.isVideo };
-        } catch (err: any) {
-            lastError = err.message || String(err);
-        }
-    }
-    throw new Error(`APIs inaccesibles: ${lastError}`);
+    const errors = results.filter(r => !r.success).map(r => r.error).filter(Boolean);
+    throw new Error(`Todas las APIs fallaron: ${errors.join(', ')}`);
 };
 
 export default {
