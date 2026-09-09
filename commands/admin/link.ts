@@ -1,7 +1,7 @@
 import { prepareWAMessageMedia } from '@whiskeysockets/baileys';
 
 export default {
-    command: ['link', 'grouplink', 'enlace'],
+    command: ['link', 'enlace'],
     description: 'Obtiene el enlace de invitación del grupo',
     category: 'group',
     group: true,
