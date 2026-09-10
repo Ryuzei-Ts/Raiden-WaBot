@@ -5,6 +5,7 @@ export default {
     command: ['ver', 'read', 'view', 'readviewonce'],
     description: 'Abre y reenvía mensajes de una sola vez (view once) como imagen, video o audio.',
     category: 'tools',
+    group: true,
     run: async ({ chat, m, sock, args }: any) => {
         const msgId = m?.id || m?.key?.id;
 
