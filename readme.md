@@ -5,7 +5,7 @@
 
 ### **`Información importante`**
 
-**Raiden WaBot es un bot de WhatsApp basado en Node.js que utiliza la librería @whiskeysockets/baileys**
+**Raiden WaBot es un bot de WhatsApp basado en **`Node.js`** que utiliza la librería @whiskeysockets/baileys**
 
 **Inspirado en el personaje Raiden de Genshin Impact**
 
