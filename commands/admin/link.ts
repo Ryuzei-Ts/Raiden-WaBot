@@ -3,7 +3,7 @@ import { prepareWAMessageMedia } from '@whiskeysockets/baileys';
 export default {
     command: ['link', 'enlace'],
     description: 'Obtiene el enlace de invitación del grupo',
-    category: 'group',
+    category: 'admin',
     group: true,
     admin: true,
     botAdmin: true,
