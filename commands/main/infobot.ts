@@ -2,8 +2,6 @@ import os from 'os';
 import config from '#config';
 import { broadcast } from '#index';
 
-const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
-
 function formatUptime(seconds: number): string {
     const d = Math.floor(seconds / (3600 * 24));
     const h = Math.floor((seconds % (3600 * 24)) / 3600);
@@ -67,20 +65,15 @@ export default {
             `❒ *Memoria RAM:* ${freeMem} GB / ${totalMem} GB\n` +
             `❒ *Uptime:* ${botUptime}`;
 
-        await delay(1500);
-
         if (config.icon) {
-            try {
-                await sock.sendMessage(chat, {
-                    image: { url: config.icon },
-                    caption
-                }, { quoted: msg });
-                return;
-            } catch (e) {
-                console.error('[infobot] Error enviando icono:', e);
-            }
+            sock.sendMessage(chat, {
+                image: { url: config.icon },
+                caption
+            }, { quoted: msg }).catch(() => {
+                sock.sendMessage(chat, { text: caption }, { quoted: msg }).catch(() => {});
+            });
+        } else {
+            sock.sendMessage(chat, { text: caption }, { quoted: msg }).catch(() => {});
         }
-
-        await sock.sendMessage(chat, { text: caption }, { quoted: msg });
     }
 };
