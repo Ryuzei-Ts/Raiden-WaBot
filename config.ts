@@ -5,7 +5,7 @@ const ownerNumbers = new Set([
 
 const config = Object.freeze({
     botName: 'Raiden-WaBot',
-    devName: 'Ryuzei-Ts',
+    devName: 'Ryuzei',
     prefix: '.',
     owner: ownerNumbers,
     banner: 'https://cdn.ryuzei.xyz/files/mz6r0pg6.jpeg',
