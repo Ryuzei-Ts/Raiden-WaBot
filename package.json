@@ -5,8 +5,9 @@
   "main": "index.ts",
   "author": "Ryuzei-Ts",
   "scripts": {
-    "start": "node --import ts-node/register/transpile-only index.ts",
-    "dev": "nodemon --watch . --ext ts,js,json --exec node --import ts-node/register/transpile-only index.ts"
+    "start": "tsx index.ts",
+    "dev": "tsx watch index.ts",
+    "build": "tsc --noEmit"
   },
   "imports": {
     "#config": "./config.ts",
@@ -18,9 +19,11 @@
     "#handler": "./handler.ts",
     "#index": "./index.ts"
   },
+  "overrides": {
+    "sharp": "^0.34.4"
+  },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
-    "@napi-rs/cli": "^3.0.0",
     "@whiskeysockets/baileys": "*",
     "axios": "^1.7.9",
     "axios-cookiejar-support": "^6.0.5",
@@ -40,8 +43,6 @@
     "pino-pretty": "^13.0.0",
     "qrcode": "^1.5.4",
     "tough-cookie": "^6.0.0",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.7.2",
     "wa-sticker-formatter": "^4.4.4",
     "ws": "^8.18.0",
     "yt-search": "^2.12.1"
@@ -54,6 +55,7 @@
     "@types/node": "latest",
     "@types/qrcode": "^1.5.5",
     "@types/ws": "^8.5.14",
-    "nodemon": "^3.1.9"
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
   }
 }
