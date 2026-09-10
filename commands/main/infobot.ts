@@ -1,4 +1,3 @@
-import { prepareWAMessageMedia } from '@whiskeysockets/baileys';
 import os from 'os';
 import config from '#config';
 import { broadcast } from '#index';
@@ -28,9 +27,6 @@ export default {
         const { sock, msg, chat, usedPrefix, prefix } = ctx;
         const p = usedPrefix || prefix || config.prefix;
 
-        const link = 'https://api.ryuzei.xyz';
-        const bannerUrl = config.banner;
-
         const botUptime = formatUptime(process.uptime());
         
         const totalMemNum = os.totalmem() / 1024 / 1024 / 1024;
@@ -59,7 +55,7 @@ export default {
             });
         });
 
-        const textMessage = 
+        const caption =
             `✿ Información del Bot *${config.botName}*\n\n` +
             `✿ *Nombre:* ${config.botName}\n` +
             `✿ *Desarrollador:* ${config.devName}\n` +
@@ -69,24 +65,22 @@ export default {
             `❒ *Procesador:* ${cpuModel}\n` +
             `❒ *Núcleos:* ${cpuCores} vCPU\n` +
             `❒ *Memoria RAM:* ${freeMem} GB / ${totalMem} GB\n` +
-            `❒ *Uptime:* ${botUptime}\n\n` +
-            `> *Enlace:* ${link}`;
+            `❒ *Uptime:* ${botUptime}`;
 
         await delay(1500);
 
-        await sock.sendMessage(chat, {
-            text: textMessage,
-            linkPreview: link && bannerUrl ? (await prepareWAMessageMedia({ image: { url: bannerUrl } }, { upload: sock.waUploadToServer, mediaTypeOverride: 'thumbnail-link' }).then(({ imageMessage }) => ({
-                'canonical-url': link,
-                'matched-text': link,
-                title: config.botName,
-                description: `Made with love by ${config.devName}`,
-                jpegThumbnail: imageMessage?.jpegThumbnail ? Buffer.from(imageMessage.jpegThumbnail) : undefined,
-                highQualityThumbnail: imageMessage || undefined
-            })).catch(() => undefined)) : undefined,
-            contextInfo: {
-                isForwarded: false
+        if (config.icon) {
+            try {
+                await sock.sendMessage(chat, {
+                    image: { url: config.icon },
+                    caption
+                }, { quoted: msg });
+                return;
+            } catch (e) {
+                console.error('[infobot] Error enviando icono:', e);
             }
-        }, { quoted: msg });
+        }
+
+        await sock.sendMessage(chat, { text: caption }, { quoted: msg });
     }
 };
