@@ -10,7 +10,7 @@ const normalizeNumber = (x: string) => {
 };
 
 export default {
-    command: ['rob', 'robar'],
+    command: ['rob', 'steal', 'robar'],
     description: 'Roba monedas a otro usuario',
     category: 'economy',
     group: true,
