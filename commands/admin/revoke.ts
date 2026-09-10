@@ -1,7 +1,7 @@
 export default {
     command: ['revoke', 'resetlink', 'resetearlink'],
     description: 'Revoca y genera un nuevo enlace de invitación del grupo',
-    category: 'group',
+    category: 'admin',
     group: true,
     admin: true,
     botAdmin: true,
