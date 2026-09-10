@@ -96,7 +96,7 @@ export default {
             const bank = userInChat.bank || 0;
             const total = coins + bank;
 
-            const fmt = (n: number) => `${coinName}${n.toLocaleString()} Coins`;
+            const fmt = (n: number) => `${n.toLocaleString()} ${coinName}`;
 
             const userName = dbData.users?.[foundKey]?.name || foundKey.split('@')[0];
 
