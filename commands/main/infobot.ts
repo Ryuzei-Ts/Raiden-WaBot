@@ -1,16 +1,16 @@
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const { prepareWAMessageMedia } = require('@whiskeysockets/baileys/lib/Utils/messages-media');
+import { prepareWAMessageMedia } from '@whiskeysockets/baileys';
 import os from 'os';
 import config from '#config';
 import { broadcast } from '#index';
+
+const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 function formatUptime(seconds: number): string {
     const d = Math.floor(seconds / (3600 * 24));
     const h = Math.floor((seconds % (3600 * 24)) / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
-
+    
     const parts = [];
     if (d > 0) parts.push(`${d}d`);
     if (h > 0) parts.push(`${h}h`);
@@ -32,7 +32,7 @@ export default {
         const bannerUrl = config.banner;
 
         const botUptime = formatUptime(process.uptime());
-
+        
         const totalMemNum = os.totalmem() / 1024 / 1024 / 1024;
         const freeMemNum = os.freemem() / 1024 / 1024 / 1024;
         const totalMem = totalMemNum.toFixed(2);
@@ -59,7 +59,7 @@ export default {
             });
         });
 
-        const textMessage =
+        const textMessage = 
             `✿ Información del Bot *${config.botName}*\n\n` +
             `✿ *Nombre:* ${config.botName}\n` +
             `✿ *Desarrollador:* ${config.devName}\n` +
@@ -72,33 +72,18 @@ export default {
             `❒ *Uptime:* ${botUptime}\n\n` +
             `> *Enlace:* ${link}`;
 
-        let linkPreview = undefined;
-        if (link && bannerUrl) {
-            try {
-                const { imageMessage } = await prepareWAMessageMedia(
-                    { image: { url: bannerUrl } },
-                    { upload: sock.waUploadToServer }
-                );
-                if (imageMessage) {
-                    linkPreview = {
-                        'canonical-url': link,
-                        'matched-text': link,
-                        title: config.botName,
-                        description: `Made with love by ${config.devName}`,
-                        jpegThumbnail: imageMessage.jpegThumbnail
-                            ? Buffer.from(imageMessage.jpegThumbnail)
-                            : undefined,
-                        highQualityThumbnail: imageMessage || undefined
-                    };
-                }
-            } catch (e) {
-                console.error('[infobot] Error prepareWAMessageMedia:', e);
-            }
-        }
+        await delay(1500);
 
         await sock.sendMessage(chat, {
             text: textMessage,
-            linkPreview,
+            linkPreview: link && bannerUrl ? (await prepareWAMessageMedia({ image: { url: bannerUrl } }, { upload: sock.waUploadToServer, mediaTypeOverride: 'thumbnail-link' }).then(({ imageMessage }) => ({
+                'canonical-url': link,
+                'matched-text': link,
+                title: config.botName,
+                description: `Made with love by ${config.devName}`,
+                jpegThumbnail: imageMessage?.jpegThumbnail ? Buffer.from(imageMessage.jpegThumbnail) : undefined,
+                highQualityThumbnail: imageMessage || undefined
+            })).catch(() => undefined)) : undefined,
             contextInfo: {
                 isForwarded: false
             }
