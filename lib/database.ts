@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, mkdirSync } from 'fs';
@@ -8,24 +8,24 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const dbDir = join(__dirname, '../database');
 const dbPath = join(dbDir, 'database.db');
 
-export let db: Database.Database;
+export let db: DatabaseSync;
 
 if (!(global as any).db) {
     (global as any).db = { data: { users: {}, chats: {} } };
 }
 
-let stmtSaveUser: Database.Statement;
-let stmtSaveChat: Database.Statement;
-let stmtSaveChatUser: Database.Statement;
+let stmtSaveUser: any;
+let stmtSaveChat: any;
+let stmtSaveChatUser: any;
 
 export const loadDB = () => {
     if (!existsSync(dbDir)) {
         mkdirSync(dbDir, { recursive: true });
     }
 
-    db = new Database(dbPath);
-    db.pragma('journal_mode = WAL');
-    db.pragma('synchronous = NORMAL');
+    db = new DatabaseSync(dbPath);
+    db.exec('PRAGMA journal_mode = WAL');
+    db.exec('PRAGMA synchronous = NORMAL');
 
     db.exec(`
         CREATE TABLE IF NOT EXISTS users (
@@ -70,7 +70,6 @@ export const loadDB = () => {
         );
     `);
 
-    // Migraciones para stickers
     try { db.exec("ALTER TABLE users ADD COLUMN sPack TEXT DEFAULT ''"); } catch {}
     try { db.exec("ALTER TABLE users ADD COLUMN sAuthor TEXT DEFAULT ''"); } catch {}
     try { db.exec("ALTER TABLE chats ADD COLUMN characters TEXT DEFAULT '{}'"); } catch {}
