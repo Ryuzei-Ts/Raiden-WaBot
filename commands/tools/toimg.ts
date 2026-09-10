@@ -52,7 +52,6 @@ export default {
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'converting' });
 
-            // Convertir el sticker (webp) a imagen (png/jpg)
             const sticker = new Sticker(buffer, {
                 pack: 'Bot',
                 author: 'Bot',
@@ -65,8 +64,7 @@ export default {
             global.broadcast?.('cmd_progress', { id: msgId, step: 'uploading' });
 
             const result = await sock.sendMessage(chat, {
-                image: imageBuffer,
-                caption: '   ׄ  ✿  Aquí tienes tu imagen.'
+                image: imageBuffer
             }, { quoted: m });
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'completed' });
