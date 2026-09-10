@@ -98,10 +98,8 @@ export default {
 
             const fmt = (n: number) => `${n.toLocaleString()} ${coinName}`;
 
-            const userName = dbData.users?.[foundKey]?.name || foundKey.split('@')[0];
-
             const caption =
-`✿ *》》Economía @${userName}《《* ✿
+`✿ *》》Economía @${targetJid.split('@')[0]}《《* ✿
 
 ⛀ Dinero » *${fmt(coins)}*
 ⚿ Banco » *${fmt(bank)}*
