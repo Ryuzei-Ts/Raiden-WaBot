@@ -96,16 +96,16 @@ export default {
             const bank = userInChat.bank || 0;
             const total = coins + bank;
 
-            const fmt = (n: number) => `${coinName}${n.toLocaleString()}`;
+            const fmt = (n: number) => `${coinName}${n.toLocaleString()} Coins`;
 
             const userName = dbData.users?.[foundKey]?.name || foundKey.split('@')[0];
 
             const caption =
 `✿ *》》Economía @${userName}《《* ✿
 
-⛀ Dinero » *${fmt(coins)} Coins*
-⚿ Banco » *${fmt(bank)} Coins*
-⛁ Total » *${fmt(total)} Coins*
+⛀ Dinero » *${fmt(coins)}*
+⚿ Banco » *${fmt(bank)}*
+⛁ Total » *${fmt(total)}*
 
 > _Para proteger tu dinero, ¡deposítalo en el banco usando ${p}deposit!_`;
 
