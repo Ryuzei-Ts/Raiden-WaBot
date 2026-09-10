@@ -46,7 +46,7 @@ export default {
             const input = (args[0] || '').toLowerCase().trim();
 
             const menuText =
-`《✧》 Debes depositar una cantidad válida.
+`「 ꕤ 」 Debes depositar una cantidad válida.
 > Ejemplo 1 » *${p}d 25000*
 > Ejemplo 2 » *${p}d all*`;
 
@@ -66,14 +66,19 @@ export default {
                 cantidad = parseInt(cleanNumber);
             }
 
+            if (coins <= 0) {
+                return await sock.sendMessage(chat, {
+                    text: `「 ꕤ 」 No tienes suficientes *${coinName}* en efectivo para depositar.`
+                }, { quoted: m });
+            }
+
             if (!cantidad || cantidad <= 0) {
                 return await sock.sendMessage(chat, { text: menuText }, { quoted: m });
             }
 
             if (cantidad > coins) {
                 return await sock.sendMessage(chat, {
-                    text: `「 ꕤ 」 No tienes suficiente dinero en tu cartera.
-> Tienes » *${coins.toLocaleString()} ${coinName}*`
+                    text: `「 ꕤ 」 No tienes suficientes *${coinName}* en efectivo para depositar.`
                 }, { quoted: m });
             }
 
