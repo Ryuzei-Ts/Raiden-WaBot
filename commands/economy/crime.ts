@@ -87,11 +87,11 @@ export default {
 
             const random = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
 
-            const perder = Math.random() < 0.4;
+            const perder = Math.random() < 0.25;
 
             if (perder) {
-                const cantidad = Math.floor(Math.random() * 15000) + 3000;
-                const perdida = Math.min(coins, cantidad);
+                const rango = Math.floor(Math.random() * 15000) + 3000;
+                const perdida = Math.min(coins, rango);
                 const frase = random(perdioFrases);
 
                 userInChat.coins = coins - perdida;
@@ -100,7 +100,7 @@ export default {
                 saveDB(chat, realSender);
 
                 return await sock.sendMessage(chat, {
-                    text: `✿ ${frase} *-${coinName}${perdida.toLocaleString()} Coins*.`
+                    text: `✿ ${frase} *-${perdida.toLocaleString()} ${coinName}*.`
                 }, { quoted: m });
             }
 
@@ -113,7 +113,7 @@ export default {
             saveDB(chat, realSender);
 
             return await sock.sendMessage(chat, {
-                text: `✿ ${frase} *${coinName}${ganancia.toLocaleString()} Coins*.`
+                text: `✿ ${frase} *${ganancia.toLocaleString()} ${coinName}*.`
             }, { quoted: m });
 
         } catch (e) {
