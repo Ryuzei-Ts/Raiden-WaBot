@@ -76,8 +76,8 @@ export default {
             saveDB(chat, realSender);
 
             let msg =
-`「✿」¡Has reclamado tu recompensa diaria de *${coinName}${reward.toLocaleString()} Coins*! (Día *${streak}*)
-> Día *${nextStreak}* » *+${coinName}${nextReward.toLocaleString()}*`;
+`「✿」¡Has reclamado tu recompensa diaria de *${reward.toLocaleString()} ${coinName}*! (Día *${streak}*)
+> Día *${nextStreak}* » *+${nextReward.toLocaleString()} ${coinName}*`;
 
             if (perdiRacha) {
                 msg += `\n> ☆ ¡Has perdido tu racha de días!`;
