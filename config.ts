@@ -9,7 +9,7 @@ const config = Object.freeze({
     prefix: '.',
     owner: ownerNumbers,
     banner: 'https://cdn.ryuzei.xyz/files/mz6r0pg6.jpeg',
-    icon: 'https://cdn.ryuzei.xyz/files/x21npy.jpeg',
+    icon: 'https://cdn.ryuzei.xyz/files/ddj5167z.jpeg',
     coin: '¥enes'
 });
 
