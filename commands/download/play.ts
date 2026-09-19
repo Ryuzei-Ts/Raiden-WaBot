@@ -1,5 +1,4 @@
 import yts from 'yt-search';
-import { spawn } from 'node:child_process';
 import { PassThrough } from 'node:stream';
 import axios from 'axios';
 import config from '#config';
@@ -24,19 +23,6 @@ const emitProgress = (msgId: string, step: string, extraData: Record<string, any
     });
 };
 
-const fetchFastBuffer = async (url: string, timeoutMs = 4000): Promise<Buffer | null> => {
-    try {
-        const res = await axios.get(url, {
-            responseType: 'arraybuffer',
-            timeout: timeoutMs,
-            headers: { 'User-Agent': 'Mozilla/5.0' }
-        });
-        return Buffer.from(res.data);
-    } catch {
-        return null;
-    }
-};
-
 const extractDownloadUrl = (data: any): string | null => {
     return data?.data?.download || data?.download || data?.dl || data?.data?.dl_url ||
            data?.data?.download?.url || data?.result?.download || data?.result?.dl ||
@@ -53,13 +39,13 @@ const getDirectAudioStream = async (link: string): Promise<PassThrough> => {
 
     for (const url of apis) {
         try {
-            const res = await axios.get(url, { timeout: 3500 });
+            const res = await axios.get(url, { timeout: 3000 });
             const dlUrl = extractDownloadUrl(res.data);
             if (!dlUrl) continue;
 
             const streamRes = await axios.get(dlUrl, {
                 responseType: 'stream',
-                timeout: 10000
+                timeout: 8000
             });
 
             const passThrough = new PassThrough();
@@ -108,7 +94,6 @@ export default {
             const videoId = video.videoId || (urlMatch ? urlMatch[1] : '');
             const videoUrl = `https://youtu.be/${videoId}`;
             const title = cleanText(video.title) || 'Sin título';
-            const thumb = cleanText(video.thumbnail || video.image || `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`);
             const channel = cleanText(video.author?.name || video.author) || "Desconocido";
             const views = typeof video.views === 'number' ? video.views : 0;
             const duration = cleanText(video.timestamp || video.duration) || "";
@@ -119,21 +104,18 @@ export default {
                 }, { quoted: msg });
             }
 
+            const mqThumbUrl = `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`;
             const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Canal* » ${channel}\nׅ  ׄ  ✿ *Vistas* » ${formatViews(views)}\nׅ  ׄ  ✿ *Tiempo* » ${duration}\nׅ  ׄ  ✿ *Link* » ${videoUrl}\n\nׅ  ׄ  ✿ *Descargando audio...*`;
 
-            const thumbPromise = thumb ? fetchFastBuffer(thumb, 2500) : Promise.resolve(null);
-            const streamPromise = getDirectAudioStream(videoUrl);
+            sock.sendMessage(chat, { 
+                image: { url: mqThumbUrl }, 
+                caption 
+            }, { quoted: msg }).catch(() => {});
 
-            const [thumbBuffer, audioStream] = await Promise.all([thumbPromise, streamPromise]);
-
-            if (thumbBuffer) {
-                sock.sendMessage(chat, { image: thumbBuffer, caption }, { quoted: msg }).catch(() => {});
-            } else {
-                sock.sendMessage(chat, { text: caption }, { quoted: msg }).catch(() => {});
-            }
+            emitProgress(msgId, 'fetching_audio_stream');
+            const audioStream = await getDirectAudioStream(videoUrl);
 
             emitProgress(msgId, 'sending_audio_to_whatsapp');
-
             return await sock.sendMessage(chat, { 
                 audio: { stream: audioStream }, 
                 mimetype: "audio/mpeg", 
