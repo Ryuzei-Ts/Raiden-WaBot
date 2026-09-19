@@ -273,10 +273,10 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
                 chat
             });
         });
-        return msg.reply('ׅ  ׄ  ✿ Este comando solo puede ser utilizado por el dueño del bot.');
+        return await msg.reply('ׅ  ׄ  ✿ Este comando solo puede ser utilizado por el dueño del bot.');
     }
     if (cmd.group && !isGroup) {
-        return msg.reply('ׅ  ׄ  ✿ Este comando solo se puede usar en grupos.');
+        return await msg.reply('ׅ  ׄ  ✿ Este comando solo se puede usar en grupos.');
     }
 
     const onlyAdminEnabled = currentChatDb.adminonly === true;
@@ -287,7 +287,7 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         const warnedUsers = adminOnlyWarned.get(chat)!;
         if (!warnedUsers.has(normalizedSender)) {
             warnedUsers.add(normalizedSender);
-            return msg.reply('ׅ  ׄ  ✿ El modo *Solo Admin* está activado, solo administradores pueden usar comandos.');
+            return await msg.reply('ׅ  ׄ  ✿ El modo *Solo Admin* está activado, solo administradores pueden usar comandos.');
         }
         return;
     }
@@ -301,10 +301,10 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
                 chat
             });
         });
-        return msg.reply('ׅ  ׄ  ✿ Necesitas ser administrador del grupo para usar este comando.');
+        return await msg.reply('ׅ  ׄ  ✿ Necesitas ser administrador del grupo para usar este comando.');
     }
     if (cmd.botAdmin && !isBotAdmins) {
-        return msg.reply('ׅ  ׄ  ✿ El bot necesita ser administrador del grupo para ejecutar este comando.');
+        return await msg.reply('ׅ  ׄ  ✿ El bot necesita ser administrador del grupo para ejecutar este comando.');
     }
 
     const cleanSender = normalizedSender + '@s.whatsapp.net';
