@@ -21,7 +21,9 @@
     "declaration": false,
     "sourceMap": false,
     "forceConsistentCasingInFileNames": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "removeComments": true,
+    "assumeChangesOnlyAffectDirectDependencies": true
   },
   "exclude": [
     "node_modules",
