@@ -173,9 +173,6 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
             const cleanNum = normalizeNumber(num); 
             return normalizedSender === cleanNum || altSender === cleanNum; 
         }); 
-    } else if (typeof ownerConfig === 'string' || typeof ownerConfig === 'number') {
-        const cleanNum = normalizeNumber(String(ownerConfig));
-        isOwner = normalizedSender === cleanNum || altSender === cleanNum;
     }
 
     let isAdmins = false;
@@ -218,6 +215,7 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
     msg.isAdmin = isAdmins;
     msg.isBotAdmin = isBotAdmins;
     msg.isOwner = isOwner;
+    msg.groupMetadata = groupMetadata;
 
     const prefix = (config as any)?.prefix || '.';
     const isCommand = msg.body ? msg.body.charCodeAt(0) === prefix.charCodeAt(0) : false;
@@ -310,7 +308,11 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         owner: isOwner,
         admin: isAdmins,
         botAdmin: isBotAdmins,
+        isAdmin: isAdmins,
+        isBotAdmin: isBotAdmins,
+        isOwner,
         chat,
+        groupMetadata,
         db: (global as any).db,
         user: dbData?.users?.[cleanSender] || {},
         chatDb: currentChatDb,
