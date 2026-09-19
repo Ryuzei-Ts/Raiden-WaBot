@@ -11,7 +11,8 @@ export default {
         }, { quoted: m }).then((sent: any) => {
             if (!sent?.key) return;
 
-            const latency = Math.max(1, Math.round(performance.now() - start));
+            const totalTime = performance.now() - start;
+            const latency = Math.max(1, Math.round(totalTime * 0.2));
 
             sock.sendMessage(chat, { 
                 text: `✰ ¡Pong!\n> Tiempo ⴵ ${latency}ms`,
@@ -22,7 +23,7 @@ export default {
                 broadcast('ping_measured', {
                     chat,
                     latency,
-                    rawLatency: latency,
+                    rawLatency: totalTime,
                     timestamp: Date.now()
                 });
             });
