@@ -37,26 +37,22 @@ const getDirectAudioStream = async (link: string): Promise<PassThrough> => {
         `https://api.starlights.uk/api/download/ytmp3v2?url=${encoded}`
     ];
 
-    for (const url of apis) {
-        try {
-            const res = await axios.get(url, { timeout: 3000 });
-            const dlUrl = extractDownloadUrl(res.data);
-            if (!dlUrl) continue;
+    const promises = apis.map(async (url) => {
+        const res = await axios.get(url, { timeout: 4000 });
+        const dlUrl = extractDownloadUrl(res.data);
+        if (!dlUrl) throw new Error('Sin URL');
 
-            const streamRes = await axios.get(dlUrl, {
-                responseType: 'stream',
-                timeout: 8000
-            });
+        const streamRes = await axios.get(dlUrl, {
+            responseType: 'stream',
+            timeout: 10000
+        });
 
-            const passThrough = new PassThrough();
-            streamRes.data.pipe(passThrough);
-            return passThrough;
-        } catch {
-            continue;
-        }
-    }
+        const passThrough = new PassThrough();
+        streamRes.data.pipe(passThrough);
+        return passThrough;
+    });
 
-    throw new Error('No se pudo obtener el stream de audio.');
+    return await Promise.any(promises);
 };
 
 export default {
@@ -73,7 +69,7 @@ export default {
             const query = args.join(" ").trim();
             if (!query) {
                 return sock.sendMessage(chat, { 
-                    text: `ꕤ Ingresa el título o enlace a buscar ✰\n\n> ꕤ *Ejemplo:* ${p}play Kamikaze - Víctor Mendivil` 
+                    text: `ꕤ Ingresa el título o enlace a buscar ✰` 
                 }, { quoted: msg });
             }
 
@@ -86,7 +82,7 @@ export default {
             if (!searchResult?.videos?.length) {
                 emitProgress(msgId, 'no_results', { query });
                 return sock.sendMessage(chat, { 
-                    text: `   ׄ  ✿ No se encontraron resultados para *${query}*.` 
+                    text: `   ׄ  ✿ No se encontraron resultados para **${query}**.` 
                 }, { quoted: msg });
             }
 
@@ -100,12 +96,14 @@ export default {
 
             if (video.seconds && video.seconds > MAX_DURATION_SECONDS) {
                 return sock.sendMessage(chat, { 
-                    text: `   ׄ  ✿ El audio dura *${duration}*, superando el límite permitido de *7 minutos*.` 
+                    text: `   ׄ  ✿ El audio dura **${duration}**, superando el límite permitido de **7 minutos**.` 
                 }, { quoted: msg });
             }
 
             const mqThumbUrl = `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`;
-            const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Canal* » ${channel}\nׅ  ׄ  ✿ *Vistas* » ${formatViews(views)}\nׅ  ׄ  ✿ *Tiempo* » ${duration}\nׅ  ׄ  ✿ *Link* » ${videoUrl}\n\nׅ  ׄ  ✿ *Descargando audio...*`;
+            const caption = `﹒𝜗ৎ      ࣪  **${title}**\n\nׅ  ׄ  ✿ **Canal** » ${channel}\nׅ  ׄ  ✿ **Vistas** » ${formatViews(views)}\nׅ  ׄ  ✿ **Tiempo** » ${duration}\nׅ  ׄ  ✿ **Link** » ${videoUrl}\n\nׅ  ׄ  ✿ **Descargando audio...**`;
+
+            const audioStreamPromise = getDirectAudioStream(videoUrl);
 
             sock.sendMessage(chat, { 
                 image: { url: mqThumbUrl }, 
@@ -113,7 +111,7 @@ export default {
             }, { quoted: msg }).catch(() => {});
 
             emitProgress(msgId, 'fetching_audio_stream');
-            const audioStream = await getDirectAudioStream(videoUrl);
+            const audioStream = await audioStreamPromise;
 
             emitProgress(msgId, 'sending_audio_to_whatsapp');
             return await sock.sendMessage(chat, { 
@@ -126,7 +124,7 @@ export default {
         } catch (error: any) {
             emitProgress(msgId, 'error', { error: error.message || String(error) });
             return sock.sendMessage(chat, { 
-                text: `《✧》 Ocurrió un error:\n\n❒ *${error.message || error}*\n\n> *Error al procesar la solicitud*` 
+                text: `《✧》 Ocurrió un error:\n\n❒ **${error.message || error}**\n\n> **Error al procesar la solicitud**` 
             }, { quoted: msg });
         }
     }
