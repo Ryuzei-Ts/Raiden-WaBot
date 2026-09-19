@@ -17,11 +17,22 @@ const maxCmdsPerWin = handlerConfig.maxCommandsPerWindow || 5;
 const groupMetaCache = new LRUCache<string, { metadata: any; ts: number }>({
     max: maxGroupCache,
     ttl: metaTtlMs,
+    ttlAutopurge: true,
+    ttlResolution: 1000,
 });
 
 const processedMsgIds = new LRUCache<string, boolean>({
     max: maxProcessedMsgs,
     ttl: msgTtlMs,
+    ttlAutopurge: true,
+    ttlResolution: 1000,
+});
+
+const cmdResolutionCache = new LRUCache<string, any>({
+    max: 1000,
+    ttl: 60000,
+    ttlAutopurge: true,
+    ttlResolution: 2000,
 });
 
 const userRateLimits = new Map<string, { count: number; resetTime: number }>();
@@ -71,6 +82,7 @@ function syncCommandMapIfNeeded(): void {
     if (currentPlugins === lastPluginsRef) return;
     lastPluginsRef = currentPlugins;
     commandMap.clear();
+    cmdResolutionCache.clear();
     if (currentPlugins && typeof currentPlugins === 'object') {
         const entries = Object.values(currentPlugins);
         for (let i = 0; i < entries.length; i++) {
@@ -239,7 +251,17 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
     if (!rawCommand) return;
 
     syncCommandMapIfNeeded();
-    const cmd = commandMap.get(rawCommand.toLowerCase()) || commandMap.get(normalizeString(rawCommand));
+
+    const lowerCmd = rawCommand.toLowerCase();
+    let cmd = cmdResolutionCache.get(lowerCmd);
+
+    if (!cmd) {
+        cmd = commandMap.get(lowerCmd) || commandMap.get(normalizeString(rawCommand));
+        if (cmd) {
+            cmdResolutionCache.set(lowerCmd, cmd);
+        }
+    }
+
     if (!cmd) return;
 
     if (cmd.owner && !isOwner) {
