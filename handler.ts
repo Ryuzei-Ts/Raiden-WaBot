@@ -52,15 +52,32 @@ const normalizeNumber = (x: string) => String(x || "").split("@")[0].split(":")[
 
 const normalizeString = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
+const stripMexOne = (num: string) => num.startsWith('521') ? '52' + num.slice(3) : num;
+
 function getAdminSet(participants: any[]): Set<string> {
     const adminSet = new Set<string>();
     if (!participants || !participants.length) return adminSet;
+
     for (let i = 0; i < participants.length; i++) {
         const p = participants[i];
         if (p.admin === 'admin' || p.admin === 'superadmin') {
-            if (p.id) adminSet.add(normalizeNumber(p.id));
-            if (p.lid) adminSet.add(normalizeNumber(p.lid));
-            if (p.phoneNumber) adminSet.add(normalizeNumber(p.phoneNumber));
+            if (p.id) {
+                const clean = normalizeNumber(p.id);
+                adminSet.add(clean);
+                adminSet.add(stripMexOne(clean));
+                adminSet.add(p.id);
+            }
+            if (p.lid) {
+                const clean = normalizeNumber(p.lid);
+                adminSet.add(clean);
+                adminSet.add(stripMexOne(clean));
+                adminSet.add(p.lid);
+            }
+            if (p.phoneNumber) {
+                const clean = normalizeNumber(p.phoneNumber);
+                adminSet.add(clean);
+                adminSet.add(p.phoneNumber);
+            }
         }
     }
     return adminSet;
@@ -152,27 +169,37 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
     const isGroup = chat.endsWith('@g.us');
     const groupMetadata = isGroup ? await getGroupMetadata(sock, chat) : null;
 
-    let realJidResult = rawMsg?.key?.participant || rawMsg?.participant || (rawMsg?.key?.fromMe ? sock.user?.id : chat);
+    const rawParticipant = rawMsg?.key?.participant || rawMsg?.participant || (rawMsg?.key?.fromMe ? sock.user?.id : chat) || '';
+    const msgSender = rawMsg?.sender || '';
+
+    let realJidResult = rawParticipant;
     try {
         realJidResult = UserJid(sock, chat, realJidResult) || realJidResult;
     } catch {}
 
     const normalizedSender = normalizeNumber(realJidResult);
+    const normalizedMsgSender = normalizeNumber(msgSender);
+
     if (checkRateLimit(normalizedSender)) return;
 
     const altSender = normalizedSender.startsWith('521') 
         ? normalizedSender.replace(/^521/, '52') 
         : (normalizedSender.startsWith('52') ? normalizedSender.replace(/^52/, '521') : normalizedSender);
 
+    const baseSender = stripMexOne(normalizedSender);
+
     const ownerConfig = (config as any)?.owner;
     let isOwner = false;
     if (ownerConfig instanceof Set) { 
-        isOwner = ownerConfig.has(normalizedSender) || ownerConfig.has(altSender); 
+        isOwner = ownerConfig.has(normalizedSender) || ownerConfig.has(altSender) || ownerConfig.has(baseSender); 
     } else if (Array.isArray(ownerConfig)) { 
         isOwner = ownerConfig.some((num: string) => { 
             const cleanNum = normalizeNumber(num); 
-            return normalizedSender === cleanNum || altSender === cleanNum; 
+            return normalizedSender === cleanNum || altSender === cleanNum || baseSender === stripMexOne(cleanNum); 
         }); 
+    } else if (typeof ownerConfig === 'string' || typeof ownerConfig === 'number') {
+        const cleanNum = normalizeNumber(String(ownerConfig));
+        isOwner = normalizedSender === cleanNum || altSender === cleanNum || baseSender === stripMexOne(cleanNum);
     }
 
     let isAdmins = false;
@@ -180,7 +207,13 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
 
     if (isGroup && groupMetadata?.participants) {
         const adminSet = getAdminSet(groupMetadata.participants);
-        isAdmins = adminSet.has(normalizedSender) || adminSet.has(altSender);
+
+        isAdmins = adminSet.has(normalizedSender) || 
+                   adminSet.has(normalizedMsgSender) || 
+                   adminSet.has(altSender) || 
+                   adminSet.has(baseSender) || 
+                   adminSet.has(rawParticipant) || 
+                   adminSet.has(msgSender);
 
         const rawBotJid = sock.user?.id || sock.user?.jid || '';
         const botBase = normalizeNumber(rawBotJid);
@@ -188,7 +221,7 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
             ? botBase.replace(/^521/, '52') 
             : (botBase.startsWith('52') ? botBase.replace(/^52/, '521') : botBase);
 
-        isBotAdmins = adminSet.has(botBase) || adminSet.has(altBot);
+        isBotAdmins = adminSet.has(botBase) || adminSet.has(altBot) || adminSet.has(stripMexOne(botBase)) || adminSet.has(rawBotJid);
     }
 
     const dbData = (global as any).db?.data;
@@ -197,7 +230,7 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
     if (isGroup && chat && Array.isArray(currentChatDb.muteds)) {
         const isMuted = currentChatDb.muteds.some((m: string) => {
             const cleanMuted = normalizeNumber(m);
-            return cleanMuted === normalizedSender || cleanMuted === altSender || m === realJidResult;
+            return cleanMuted === normalizedSender || cleanMuted === altSender || cleanMuted === baseSender || m === realJidResult;
         });
 
         if (isMuted && !isOwner) {
