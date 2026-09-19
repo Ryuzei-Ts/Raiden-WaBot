@@ -69,7 +69,7 @@ export default {
             const query = args.join(" ").trim();
             if (!query) {
                 return sock.sendMessage(chat, { 
-                    text: `ꕤ Ingresa el título o enlace a buscar ✰` 
+                    text: `ꕤ *Ingresa el título o enlace a buscar* ✰` 
                 }, { quoted: msg });
             }
 
@@ -101,7 +101,7 @@ export default {
             }
 
             const mqThumbUrl = `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`;
-            const caption = `﹒𝜗ৎ      ࣪  **${title}**\n\nׅ  ׄ  ✿ **Canal** » ${channel}\nׅ  ׄ  ✿ **Vistas** » ${formatViews(views)}\nׅ  ׄ  ✿ **Tiempo** » ${duration}\nׅ  ׄ  ✿ **Link** » ${videoUrl}\n\nׅ  ׄ  ✿ **Descargando audio...**`;
+            const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Canal* » ${channel}\nׅ  ׄ  ✿ *Vistas* » ${formatViews(views)}\nׅ  ׄ  ✿ *Tiempo* » ${duration}\nׅ  ׄ  ✿ *Link* » ${videoUrl}\n\nׅ  ׄ  ✿ *Descargando audio...*`;
 
             const audioStreamPromise = getDirectAudioStream(videoUrl);
 
