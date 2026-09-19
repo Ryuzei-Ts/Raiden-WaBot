@@ -1,22 +1,46 @@
+import { PassThrough } from 'node:stream';
 import axios from 'axios';
 import config from '#config';
 
-const getBuffer = async (url: string, timeoutMs = 30000): Promise<Buffer> => {
-    try {
-        const res = await axios.get(url, {
-            responseType: 'arraybuffer',
-            timeout: timeoutMs,
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-        });
-        return Buffer.from(res.data);
-    } catch {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-        const res = await fetch(url, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return Buffer.from(await res.arrayBuffer());
+const extractVideoUrl = (data: any): string | null => {
+    const media = data?.data?.meta?.media?.[0] || data?.meta?.media?.[0];
+    if (media) {
+        const candidate = media.hd && media.hd !== '0 B' ? media.hd : media.org || media.wm;
+        if (candidate && candidate.startsWith('http')) return candidate;
     }
+    const rawUrl = data?.data?.play || data?.play || data?.url || data?.data?.url;
+    return typeof rawUrl === 'string' && rawUrl.startsWith('http') ? rawUrl : null;
+};
+
+const fetchTikTokData = async (url: string) => {
+    const encoded = encodeURIComponent(url);
+    const apis = [
+        `https://api.delirius.online/download/tiktok?url=${encoded}`,
+        `https://api.starlights.uk/api/download/tiktok?url=${encoded}`
+    ];
+
+    const promises = apis.map(async (apiUrl) => {
+        const res = await axios.get(apiUrl, {
+            timeout: 5000,
+            headers: { 'User-Agent': 'Mozilla/5.0 (Linux; Android 15; Pixel 7)' }
+        });
+        if (!res.data) throw new Error('Sin datos');
+        return res.data;
+    });
+
+    return await Promise.any(promises);
+};
+
+const getVideoStream = async (videoUrl: string): Promise<PassThrough> => {
+    const res = await axios.get(videoUrl, {
+        responseType: 'stream',
+        timeout: 15000,
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+    });
+
+    const passThrough = new PassThrough();
+    res.data.pipe(passThrough);
+    return passThrough;
 };
 
 export default {
@@ -24,8 +48,7 @@ export default {
     description: 'Descarga videos de TikTok',
     category: 'download',
     group: true,
-    run: async ({ chat, m, sock, args, usedPrefix, prefix }: any) => {
-        const p = usedPrefix || prefix || config.prefix || '.';
+    run: async ({ chat, m, sock, args }: any) => {
         const msgId = m?.id || m?.key?.id;
 
         try {
@@ -45,65 +68,52 @@ export default {
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'search_started', url });
 
-            const endpoint = `https://api.delirius.online/download/tiktok?url=${encodeURIComponent(url)}`;
+            const responseData = await fetchTikTokData(url);
+            const data = responseData?.data || responseData;
 
-            const res = await axios.get(endpoint, {
-                timeout: 20000,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Linux; Android 15; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-                    'Accept': 'application/json'
-                }
-            });
-
-            const data = res.data?.data;
-
-            if (!res.data?.status || !data || !data.meta?.media?.length) {
+            const videoUrl = extractVideoUrl(responseData);
+            if (!videoUrl) {
                 global.broadcast?.('cmd_progress', { id: msgId, step: 'no_results', url });
                 return sock.sendMessage(chat, { 
                     text: `   ׄ  ✿  No se pudo obtener el video de TikTok. Verifica el enlace.` 
                 }, { quoted: m });
             }
 
-            const duration = data.duration || 0;
+            const duration = data.duration || data.meta?.duration || 0;
             if (duration > 900) {
                 return sock.sendMessage(chat, { 
-                    text: `   ׄ  ✿  El video excede los 15 minutos de duración (${Math.round(duration/60)} minutos).` 
+                    text: `   ׄ  ✿  El video excede los 15 minutos de duración.` 
                 }, { quoted: m });
             }
 
-            const media = data.meta.media[0];
-            let videoUrl = media.hd && media.hd !== '0 B' ? media.hd : media.org || media.wm;
+            const title = (data.title || 'Sin título').trim();
+            const author = data.author?.nickname || 'Desconocido';
+            const rawUsername = data.author?.username || 'desconocido';
+            const username = rawUsername.startsWith('@') ? rawUsername.slice(1) : rawUsername;
+            
+            const rawLikes = data.like || data.digg_count || 0;
+            const likes = typeof rawLikes === 'number' ? rawLikes : parseInt(String(rawLikes).replace(/\D/g, '')) || 0;
 
-            if (!videoUrl || videoUrl === '0 B') {
-                return sock.sendMessage(chat, { 
-                    text: `   ׄ  ✿  No se encontró un enlace de video válido.` 
-                }, { quoted: m });
-            }
-
-            let title = (data.title || 'Sin título').trim();
-            const author = data.author?.nickname || data.author?.username || 'Desconocido';
-            const username = data.author?.username || 'Desconocido';
-            const likes = parseInt(String(data.like || 0).replace(/\./g, ''));
-            const durationFormatted = data.duration || 0;
-            const musicTitle = data.music?.title || 'Sin música';
-            const musicAuthor = data.music?.author || 'Desconocido';
+            const musicTitle = data.music?.title || data.music_info?.title || 'Sin música';
+            const musicAuthor = data.music?.author || data.music_info?.author || 'Desconocido';
 
             const formatNumber = (num: number) => {
-                if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-                if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+                if (num >= 1e6) return (num / 1e6).toFixed(1) + 'M';
+                if (num >= 1e3) return (num / 1e3).toFixed(1) + 'K';
                 return num.toString();
             };
 
-            const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Autor* » ${author} (@${username})\nׅ  ׄ  ✿ *Likes* » ${formatNumber(likes)}\nׅ  ׄ  ✿ *Duración* » ${durationFormatted}s\nׅ  ׄ  ✿ *Música* » ${musicTitle} - ${musicAuthor}\n\nׅ  ׄ  ✿ Made with love By *Ryuzei*`.trim();
+            const devName = config.devName || 'Ryuzei';
+            const caption = `﹒𝜗ৎ      ࣪  **${title}**\n\nׅ  ׄ  ✿ **Autor** » ${author} (@${username})\nׅ  ׄ  ✿ **Likes** » ${formatNumber(likes)}\nׅ  ׄ  ✿ **Duración** » ${duration}s\nׅ  ׄ  ✿ **Música** » ${musicTitle} - ${musicAuthor}\n\nׅ  ׄ  ✿ Made with love By **${devName}**`.trim();
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'downloading_video' });
 
-            const videoBuffer = await getBuffer(videoUrl, 30000);
+            const videoStream = await getVideoStream(videoUrl);
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'sending_video' });
 
             const result = await sock.sendMessage(chat, { 
-                video: videoBuffer, 
+                video: { stream: videoStream }, 
                 caption,
                 gifPlayback: false
             }, { quoted: m });
@@ -114,16 +124,8 @@ export default {
 
         } catch (error: any) {
             global.broadcast?.('cmd_progress', { id: msgId, step: 'error', error: error.message || String(error) });
-            
-            let errorMsg = '   ׄ  ✿  Ocurrió un error al procesar tu solicitud.';
-            if (error.message?.includes('timeout') || error.code === 'ECONNABORTED') {
-                errorMsg = '   ׄ  ✿  El servidor tardó demasiado en responder. Intenta de nuevo.';
-            } else if (error.response?.status === 429) {
-                errorMsg = '   ׄ  ✿  Demasiadas solicitudes. Espera un momento e intenta de nuevo.';
-            }
-            
             return sock.sendMessage(chat, { 
-                text: errorMsg
+                text: `   ׄ  ✿  Ocurrió un error al procesar tu solicitud.`
             }, { quoted: m });
         }
     }
