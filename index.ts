@@ -13,13 +13,10 @@ import path, { join, dirname } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import readline from 'readline';
 import qrcode from 'qrcode';
-import { createServer, Server as HttpServer } from 'http';
-import { createServer as createNetServer } from 'net';
-import { WebSocketServer, WebSocket } from 'ws';
+import { EventEmitter } from 'events';
 import { LRUCache } from 'lru-cache';
 import debounce from 'lodash.debounce';
 import Agent from 'node:https';
-
 import { serialize } from '#simple';
 import { loadDB } from '#db';
 import config from '#config';
@@ -32,78 +29,20 @@ const __dirname = dirname(__filename);
 declare global {
     var botName: string;
     var plugins: Record<string, any>;
-    var server: any;
-    var expressServer: any;
+    var eventBus: EventEmitter;
     var broadcast: (event: string, payload: any) => void;
 }
 
 globalThis.botName = config?.botName || 'Raiden-WaBot';
 globalThis.plugins = globalThis.plugins || {};
 
-const checkPortAvailable = (port: number, host = '0.0.0.0'): Promise<boolean> => {
-    return new Promise((resolve) => {
-        const tester = createNetServer();
-        tester.once('error', () => resolve(false));
-        tester.once('listening', () => {
-            tester.close(() => resolve(true));
-        });
-        tester.listen(port, host);
-    });
-};
-
-const findAvailablePortFast = async (start = 8800, end = 1, batchSize = 100): Promise<number> => {
-    if (process.env.PORT) {
-        const envPort = Number(process.env.PORT);
-        if (await checkPortAvailable(envPort)) return envPort;
-    }
-
-    for (let current = start; current >= end; current -= batchSize) {
-        const batchEnd = Math.max(end, current - batchSize + 1);
-        const tasks: Promise<number | null>[] = [];
-
-        for (let p = current; p >= batchEnd; p--) {
-            tasks.push(
-                checkPortAvailable(p).then((available) => (available ? p : null))
-            );
-        }
-
-        const results = await Promise.all(tasks);
-        const availablePort = results.find((p) => p !== null);
-        if (availablePort) return availablePort;
-    }
-
-    return 0;
-};
-
-const httpServer: HttpServer = globalThis.server || globalThis.expressServer || createServer();
-
-if (!httpServer.listening) {
-    findAvailablePortFast(8800, 1, 100).then((port) => {
-        httpServer.listen(port, '0.0.0.0');
-    });
-}
-
-globalThis.server = httpServer;
-
-const wss = new WebSocketServer({ server: httpServer });
-const clients = new Set<WebSocket>();
-
-wss.on('connection', (ws) => {
-    clients.add(ws);
-    ws.send(JSON.stringify({ type: 'status', data: 'Connected to Raiden-WaBot Realtime Stream' }));
-
-    ws.on('close', () => clients.delete(ws));
-    ws.on('error', (err) => console.error(chalk.red('WebSocket Client Error:'), err));
-});
+export const eventBus = globalThis.eventBus || new EventEmitter();
+eventBus.setMaxListeners(50);
+globalThis.eventBus = eventBus;
 
 export function broadcast(event: string, payload: any) {
-    if (clients.size === 0) return;
-    const message = JSON.stringify({ event, payload, timestamp: Date.now() });
-    for (const client of clients) {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(message);
-        }
-    }
+    eventBus.emit(event, { payload, timestamp: Date.now() });
+    eventBus.emit('*', { event, payload, timestamp: Date.now() });
 }
 
 globalThis.broadcast = broadcast;
