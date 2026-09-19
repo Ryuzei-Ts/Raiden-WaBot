@@ -104,7 +104,7 @@ export default {
             };
 
             const devName = config.devName || 'Ryuzei';
-            const caption = `﹒𝜗ৎ      ࣪  **${title}**\n\nׅ  ׄ  ✿ **Autor** » ${author} (@${username})\nׅ  ׄ  ✿ **Likes** » ${formatNumber(likes)}\nׅ  ׄ  ✿ **Duración** » ${duration}s\nׅ  ׄ  ✿ **Música** » ${musicTitle} - ${musicAuthor}\n\nׅ  ׄ  ✿ Made with love By **${devName}**`.trim();
+            const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Autor* » ${author} (@${username})\nׅ  ׄ  ✿ *Likes* » ${formatNumber(likes)}\nׅ  ׄ  ✿ *Duración* » ${duration}s\nׅ  ׄ  ✿ *Música* » ${musicTitle} - ${musicAuthor}\n\nׅ  ׄ  ✿ Made with love By *${devName}*`.trim();
 
             global.broadcast?.('cmd_progress', { id: msgId, step: 'downloading_video' });
 
