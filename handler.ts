@@ -17,22 +17,11 @@ const maxCmdsPerWin = handlerConfig.maxCommandsPerWindow || 5;
 const groupMetaCache = new LRUCache<string, { metadata: any; ts: number }>({
     max: maxGroupCache,
     ttl: metaTtlMs,
-    ttlAutopurge: true,
-    ttlResolution: 1000,
 });
 
 const processedMsgIds = new LRUCache<string, boolean>({
     max: maxProcessedMsgs,
     ttl: msgTtlMs,
-    ttlAutopurge: true,
-    ttlResolution: 1000,
-});
-
-const cmdResolutionCache = new LRUCache<string, any>({
-    max: 1000,
-    ttl: 60000,
-    ttlAutopurge: true,
-    ttlResolution: 2000,
 });
 
 const userRateLimits = new Map<string, { count: number; resetTime: number }>();
@@ -82,7 +71,6 @@ function syncCommandMapIfNeeded(): void {
     if (currentPlugins === lastPluginsRef) return;
     lastPluginsRef = currentPlugins;
     commandMap.clear();
-    cmdResolutionCache.clear();
     if (currentPlugins && typeof currentPlugins === 'object') {
         const entries = Object.values(currentPlugins);
         for (let i = 0; i < entries.length; i++) {
@@ -185,6 +173,9 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
             const cleanNum = normalizeNumber(num); 
             return normalizedSender === cleanNum || altSender === cleanNum; 
         }); 
+    } else if (typeof ownerConfig === 'string' || typeof ownerConfig === 'number') {
+        const cleanNum = normalizeNumber(String(ownerConfig));
+        isOwner = normalizedSender === cleanNum || altSender === cleanNum;
     }
 
     let isAdmins = false;
@@ -223,6 +214,11 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
     const msg = serialize(sock, rawMsg);
     if (!msg) return;
 
+    msg.isGroup = isGroup;
+    msg.isAdmin = isAdmins;
+    msg.isBotAdmin = isBotAdmins;
+    msg.isOwner = isOwner;
+
     const prefix = (config as any)?.prefix || '.';
     const isCommand = msg.body ? msg.body.charCodeAt(0) === prefix.charCodeAt(0) : false;
 
@@ -251,17 +247,7 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
     if (!rawCommand) return;
 
     syncCommandMapIfNeeded();
-
-    const lowerCmd = rawCommand.toLowerCase();
-    let cmd = cmdResolutionCache.get(lowerCmd);
-
-    if (!cmd) {
-        cmd = commandMap.get(lowerCmd) || commandMap.get(normalizeString(rawCommand));
-        if (cmd) {
-            cmdResolutionCache.set(lowerCmd, cmd);
-        }
-    }
-
+    const cmd = commandMap.get(rawCommand.toLowerCase()) || commandMap.get(normalizeString(rawCommand));
     if (!cmd) return;
 
     if (cmd.owner && !isOwner) {
@@ -273,10 +259,10 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
                 chat
             });
         });
-        return await msg.reply('ׅ  ׄ  ✿ Este comando solo puede ser utilizado por el dueño del bot.');
+        return msg.reply('ׅ  ׄ  ✿ Este comando solo puede ser utilizado por el dueño del bot.');
     }
     if (cmd.group && !isGroup) {
-        return await msg.reply('ׅ  ׄ  ✿ Este comando solo se puede usar en grupos.');
+        return msg.reply('ׅ  ׄ  ✿ Este comando solo se puede usar en grupos.');
     }
 
     const onlyAdminEnabled = currentChatDb.adminonly === true;
@@ -287,7 +273,7 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
         const warnedUsers = adminOnlyWarned.get(chat)!;
         if (!warnedUsers.has(normalizedSender)) {
             warnedUsers.add(normalizedSender);
-            return await msg.reply('ׅ  ׄ  ✿ El modo *Solo Admin* está activado, solo administradores pueden usar comandos.');
+            return msg.reply('ׅ  ׄ  ✿ El modo *Solo Admin* está activado, solo administradores pueden usar comandos.');
         }
         return;
     }
@@ -301,10 +287,10 @@ export const handler = async (sock: any, rawMsg: any): Promise<any> => {
                 chat
             });
         });
-        return await msg.reply('ׅ  ׄ  ✿ Necesitas ser administrador del grupo para usar este comando.');
+        return msg.reply('ׅ  ׄ  ✿ Necesitas ser administrador del grupo para usar este comando.');
     }
     if (cmd.botAdmin && !isBotAdmins) {
-        return await msg.reply('ׅ  ׄ  ✿ El bot necesita ser administrador del grupo para ejecutar este comando.');
+        return msg.reply('ׅ  ׄ  ✿ El bot necesita ser administrador del grupo para ejecutar este comando.');
     }
 
     const cleanSender = normalizedSender + '@s.whatsapp.net';
