@@ -1,5 +1,4 @@
 import yts from 'yt-search';
-import { PassThrough } from 'node:stream';
 import axios from 'axios';
 import config from '#config';
 
@@ -24,44 +23,42 @@ const emitProgress = (msgId: string, step: string, extraData: Record<string, any
 };
 
 const extractDownloadUrl = (data: any): string => {
-    return data?.data?.download || data?.download || data?.dl || data?.data?.dl_url || 
-           data?.data?.download?.url || data?.datos?.url || data?.result?.download || 
-           data?.result?.dl || data?.result?.url || data?.result?.link || 
-           data?.data?.dl || data?.data?.url || data?.data?.link || 
-           (typeof data?.download === 'object' ? data?.download?.url || data?.download?.link : null) || 
-           data?.url || data?.link || '';
+    const candidate = data?.data?.download || data?.download || data?.dl || data?.data?.dl_url || 
+                      data?.data?.download?.url || data?.datos?.url || data?.result?.download || 
+                      data?.result?.dl || data?.result?.url || data?.result?.link || 
+                      data?.data?.dl || data?.data?.url || data?.data?.link || 
+                      (typeof data?.download === 'object' ? data?.download?.url || data?.download?.link : null) || 
+                      data?.url || data?.link;
+    return (typeof candidate === 'string' && candidate.startsWith('http')) ? candidate : '';
 };
 
-const fetchApiStream = (url: string): Promise<PassThrough> => {
-    return axios.get(url, { timeout: 8000 })
-        .then(res => {
-            const dlUrl = extractDownloadUrl(res.data);
-            if (!dlUrl) throw new Error('Sin URL');
-            return axios.get(dlUrl, { responseType: 'stream', timeout: 15000 });
-        })
-        .then(streamRes => {
-            const passThrough = new PassThrough();
-            streamRes.data.pipe(passThrough);
-            return passThrough;
-        });
+const fetchApiUrl = (apiUrl: string): Promise<string> => {
+    return axios.get(apiUrl, { 
+        timeout: 10000,
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+    }).then(res => {
+        const dlUrl = extractDownloadUrl(res.data);
+        if (!dlUrl) throw new Error('Sin URL');
+        return dlUrl;
+    });
 };
 
-const getFastestAudioStream = (link: string): Promise<PassThrough> => {
-    const encoded = encodeURIComponent(link);
+const getAudioUrlWithRetry = (videoUrl: string): Promise<string> => {
+    const encoded = encodeURIComponent(videoUrl);
     const apis = [
         `https://api.delirius.online/download/ytmp3?url=${encoded}`,
         `https://api.starlights.uk/api/download/ytmp3?url=${encoded}`,
         `https://api.starlights.uk/api/download/ytmp3v2?url=${encoded}`
     ];
 
-    return fetchApiStream(apis[0])
-        .catch(() => fetchApiStream(apis[1]))
-        .catch(() => fetchApiStream(apis[2]));
+    return fetchApiUrl(apis[0])
+        .catch(() => fetchApiUrl(apis[1]))
+        .catch(() => fetchApiUrl(apis[2]));
 };
 
 export default {
     command: ['play', 'playaudio', 'audio'],
-    description: 'Descarga y envía audio de YouTube ultrarrápido.',
+    description: 'Descarga y envía audio de YouTube.',
     category: 'download',
     group: true,
     run: (ctx: any) => {
@@ -107,19 +104,16 @@ export default {
 
                 emitProgress(msgId, 'fetching_audio_stream');
 
-                return getFastestAudioStream(videoUrl).then(audioStream => {
+                return getAudioUrlWithRetry(videoUrl).then(downloadUrl => {
                     emitProgress(msgId, 'sending_audio_to_whatsapp');
                     return sock.sendMessage(chat, { 
-                        audio: { stream: audioStream }, 
+                        audio: { url: downloadUrl }, 
                         mimetype: "audio/mpeg", 
                         fileName: `${title}.mp3`, 
                         ptt: false 
                     }, { quoted: msg });
                 });
             })
-            .catch((error: any) => {
-                emitProgress(msgId, 'error', { error: error.message || String(error) });
-                return sock.sendMessage(chat, { text: `> ${error.message}` }, { quoted: msg });
-            });
+            .catch(() => {});
     }
 };
