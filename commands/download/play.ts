@@ -1,10 +1,9 @@
 import yts from 'yt-search';
-import { spawn } from 'child_process';
+import { PassThrough } from 'node:stream';
 import axios from 'axios';
 import config from '#config';
 
 const MAX_DURATION_SECONDS = 7 * 60;
-const MAX_FILE_SIZE_BYTES = 30 * 1024 * 1024;
 
 const cleanText = (text: any): string => {
     if (text === null || text === undefined) return '';
@@ -28,44 +27,8 @@ const emitProgress = (msgId: string, step: string, extraData: Record<string, any
     });
 };
 
-const getBufferFast = async (url: string, timeoutMs = 15000): Promise<Buffer> => {
-    try {
-        const res = await axios.get(url, {
-            responseType: 'arraybuffer',
-            timeout: timeoutMs,
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-        });
-        return Buffer.from(res.data);
-    } catch {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-        const res = await fetch(url, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return Buffer.from(await res.arrayBuffer());
-    }
-};
-
-const convertVideoToAudioBuffer = (videoBuffer: Buffer): Promise<Buffer> => new Promise((resolve, reject) => {
-    const ffmpeg = spawn('ffmpeg', [
-        '-i', 'pipe:0',
-        '-vn',
-        '-c:a', 'libmp3lame',
-        '-b:a', '96k',
-        '-preset', 'ultrafast',
-        '-threads', '2',
-        '-f', 'mp3',
-        'pipe:1'
-    ]);
-    const chunks: Buffer[] = [];
-    ffmpeg.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
-    ffmpeg.on('close', (code) => code === 0 ? resolve(Buffer.concat(chunks)) : reject(new Error(`FFmpeg error (${code})`)));
-    ffmpeg.on('error', reject);
-    ffmpeg.stdin.end(videoBuffer);
-});
-
 const extractDownloadUrl = (data: any): string => {
-    const candidate = data?.data?.download||data?.download||data?.dl||data?.data?.dl_url||data?.data?.download?.url||data?.datos?.url||data?.result?.download||data?.result?.dl||data?.result?.url||data?.result?.link||data?.data?.dl||data?.data?.url||data?.data?.link||(typeof data?.download==='object'?data?.download?.url||data?.download?.link:null)||(typeof data?.result==='string'&&data.result.startsWith('http')?data.result:null)||data?.url||data?.link;
+    const candidate = data?.data?.download || data?.download || data?.dl || data?.data?.dl_url || data?.data?.download?.url || data?.datos?.url || data?.result?.download || data?.result?.dl || data?.result?.url || data?.result?.link || data?.data?.dl || data?.data?.url || data?.data?.link || (typeof data?.download === 'object' ? data?.download?.url || data?.download?.link : null) || (typeof data?.result === 'string' && data.result.startsWith('http') ? data.result : null) || data?.url || data?.link;
     if (!candidate || typeof candidate !== 'string' || !candidate.startsWith('http')) throw new Error('Respuesta sin URL válida');
     return candidate;
 };
@@ -88,147 +51,33 @@ const fetchWithTimeout = async (url: string, timeoutMs = 5000): Promise<any> => 
     }
 };
 
-const getAudioBufferFromApis = async (link: string): Promise<{ buffer: Buffer; isVideo: boolean }> => {
+const getDirectAudioStream = async (link: string): Promise<PassThrough> => {
     const encoded = encodeURIComponent(link);
     const apis = [
-        { url: `https://api.delirius.online/download/ytmp3?url=${encoded}`, isVideo: false },
-        { url: `https://api.starlights.uk/api/download/ytmp3?url=${encoded}`, isVideo: false },
-        { url: `https://api.starlights.uk/api/download/ytmp3v2?url=${encoded}`, isVideo: false }
+        `https://api.delirius.online/download/ytmp3?url=${encoded}`,
+        `https://api.starlights.uk/api/download/ytmp3?url=${encoded}`,
+        `https://api.starlights.uk/api/download/ytmp3v2?url=${encoded}`
     ];
 
     for (const api of apis) {
         try {
-            const data = await fetchWithTimeout(api.url, 5000);
+            const data = await fetchWithTimeout(api, 5000);
             const dlUrl = extractDownloadUrl(data);
-            const buffer = await getBufferFast(dlUrl, 20000);
-            return { buffer, isVideo: api.isVideo };
+            
+            const streamRes = await axios.get(dlUrl, {
+                responseType: 'stream',
+                timeout: 10000
+            });
+
+            const passThrough = new PassThrough();
+            streamRes.data.pipe(passThrough);
+            return passThrough;
         } catch {
             continue;
         }
     }
     
     throw new Error('No se pudo descargar el audio desde ninguna API disponible');
-};
-
-export default {
-    command: ['play', 'playaudio', 'audio'],
-    description: 'Descarga y envía audio de YouTube.',
-    category: 'download',
-    group: true,
-    run: async (ctx: any) => {
-        const { sock, msg, chat, args, usedPrefix, prefix } = ctx;
-        const p = usedPrefix || prefix || config.prefix;
-        const msgId = msg?.id || msg?.key?.id;
-
-        try {
-            const query = args.join(" ").replace(/^\s+|\s+$/g, '');
-            if (!query) {
-                return sock.sendMessage(chat, { 
-                    text: `ꕤ Ingresa el título o enlace a buscar ✰\n\n> ꕤ *Ejemplo:* ${p}play Kamikaze - Víctor Mendivil` 
-                }, { quoted: msg });
-            }
-
-            emitProgress(msgId, 'search_started', { query });
-
-            let searchQuery = query;
-            const urlMatch = query.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/|v\/))([a-zA-Z0-9_-]{11})/);
-            if (urlMatch) searchQuery = `https://youtu.be/${urlMatch[1]}`;
-
-            const searchResult = await yts(searchQuery);
-            if (!searchResult?.videos?.length) {
-                emitProgress(msgId, 'no_results', { query });
-                return sock.sendMessage(chat, { 
-                    text: `   ׄ  ✿  No se encontraron resultados para *${query}*, por favor intenta con otro nombre o enlace.` 
-                }, { quoted: msg });
-            }
-
-            const video = searchResult.videos[0];
-            const videoId = video.videoId || (urlMatch ? urlMatch[1] : '');
-            const videoUrl = `https://youtu.be/${videoId}`;
-            const title = cleanText(video.title) || 'Sin título';
-            const thumb = cleanText(video.thumbnail || video.image || `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`);
-            const channel = cleanText(video.author?.name || video.author || "Desconocido") || "Desconocido";
-            const views = typeof video.views === 'number' ? video.views : 0;
-            const duration = cleanText(video.timestamp || video.duration || "") || "";
-
-            if (video.seconds && video.seconds > MAX_DURATION_SECONDS) {
-                return sock.sendMessage(chat, { 
-                    text: `   ׄ  ✿ El audio dura *${duration}*, superando el límite máximo permitido de *7 minutos*.` 
-                }, { quoted: msg });
-            }
-
-            const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Canal* » ${channel}\nׅ  ׄ  ✿ *Vistas* » ${formatViews(views)}\nׅ  ׄ  ✿ *Tiempo* » ${duration}\nׅ  ׄ  ✿ *Link* » ${videoUrl}\n\nׅ  ׄ  ✿ *Descargando audio...*`;
-
-            let thumbBuffer = null;
-            if (thumb) {
-                try { 
-                    thumbBuffer = await getBufferFast(thumb, 3000); 
-                } catch {}
-            }
-
-            if (thumbBuffer) {
-                await sock.sendMessage(chat, { image: thumbBuffer, caption }, { quoted: msg });
-            } else {
-                await sock.sendMessage(chat, { text: caption }, { quoted: msg });
-            }
-
-            emitProgress(msgId, 'media_found', { title, duration, channel, videoUrl });
-
-            emitProgress(msgId, 'downloading_audio_stream');
-            const streamData = await getAudioBufferFromApis(videoUrl);
-
-            let audioBuffer: Buffer;
-            if (streamData.isVideo) {
-                emitProgress(msgId, 'converting_video_to_audio');
-                audioBuffer = await convertVideoToAudioBuffer(streamData.buffer);
-            } else {
-                audioBuffer = streamData.buffer;
-            }
-
-            if (audioBuffer.length > MAX_FILE_SIZE_BYTES) {
-                const sizeMb = (audioBuffer.length / (1024 * 1024)).toFixed(1);
-                return sock.sendMessage(chat, { 
-                    text: `   ׄ  ✿ El audio pesa *${sizeMb} MB*, superando el peso máximo permitido de *30 MB*.` 
-                }, { quoted: msg });
-            }
-
-            emitProgress(msgId, 'sending_audio_to_whatsapp');
-            const result = await sock.sendMessage(chat, { 
-                audio: audioBuffer, 
-                mimetype: "audio/mpeg", 
-                fileName: `${title}.mp3`, 
-                ptt: false 
-            }, { quoted: msg });
-
-            emitProgress(msgId, 'completed', { title });
-
-            return result;
-        } catch (error: any) {
-            emitProgress(msgId, 'error', { error: error.message || String(error) });
-            return sock.sendMessage(chat, { 
-                text: `《✧》 Ocurrió un error:\n\n❒ *${error.message || error}*\n\n> *Error al procesar la solicitud*` 
-            }, { quoted: msg });
-        }
-    }
-};        `https://api.starlights.uk/api/download/ytmp3v2?url=${encoded}`
-    ];
-
-    const promises = apis.map(async (url) => {
-        const res = await axios.get(url, { timeout: 4000 });
-        const dlUrl = extractDownloadUrl(res.data);
-        if (!dlUrl) throw new Error('Sin URL');
-
-        const streamRes = await axios.get(dlUrl, {
-            responseType: 'stream',
-            timeout: 10000
-        });
-
-        const passThrough = new PassThrough();
-        streamRes.data.pipe(passThrough);
-        return passThrough;
-    });
-
-    return await Promise.any(promises);
 };
 
 export default {
@@ -258,7 +107,7 @@ export default {
             if (!searchResult?.videos?.length) {
                 emitProgress(msgId, 'no_results', { query });
                 return sock.sendMessage(chat, { 
-                    text: `   ׄ  ✿ No se encontraron resultados para **${query}**.` 
+                    text: `   ` + `   ׄ  ✿ No se encontraron resultados para **${query}**.` 
                 }, { quoted: msg });
             }
 
@@ -300,7 +149,7 @@ export default {
         } catch (error: any) {
             emitProgress(msgId, 'error', { error: error.message || String(error) });
             return sock.sendMessage(chat, { 
-                text: `《✧》 Ocurrió un error:\n\n❒ **${error.message || error}**\n\n> **Error al procesar la solicitud**` 
+                text: `> ${error.message}` 
             }, { quoted: msg });
         }
     }
