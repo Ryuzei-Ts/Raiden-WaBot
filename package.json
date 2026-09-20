@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
-    "@whiskeysockets/baileys": "*",
+    "@whiskeysockets/baileys": "github:Ryuzei-Ts/Meta",
     "axios": "^1.7.9",
     "axios-cookiejar-support": "^6.0.5",
     "chalk": "^5.4.1",
