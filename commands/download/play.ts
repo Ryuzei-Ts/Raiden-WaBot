@@ -32,6 +32,20 @@ const extractDownloadUrl = (data: any): string => {
            data?.url || data?.link || '';
 };
 
+const fetchApiStream = (url: string): Promise<PassThrough> => {
+    return axios.get(url, { timeout: 8000 })
+        .then(res => {
+            const dlUrl = extractDownloadUrl(res.data);
+            if (!dlUrl) throw new Error('Sin URL');
+            return axios.get(dlUrl, { responseType: 'stream', timeout: 15000 });
+        })
+        .then(streamRes => {
+            const passThrough = new PassThrough();
+            streamRes.data.pipe(passThrough);
+            return passThrough;
+        });
+};
+
 const getFastestAudioStream = (link: string): Promise<PassThrough> => {
     const encoded = encodeURIComponent(link);
     const apis = [
@@ -40,21 +54,9 @@ const getFastestAudioStream = (link: string): Promise<PassThrough> => {
         `https://api.starlights.uk/api/download/ytmp3v2?url=${encoded}`
     ];
 
-    return Promise.any(
-        apis.map(url => 
-            axios.get(url, { timeout: 3000 })
-                .then(res => {
-                    const dlUrl = extractDownloadUrl(res.data);
-                    if (!dlUrl) throw new Error('Sin URL');
-                    return axios.get(dlUrl, { responseType: 'stream', timeout: 8000 });
-                })
-                .then(streamRes => {
-                    const passThrough = new PassThrough();
-                    streamRes.data.pipe(passThrough);
-                    return passThrough;
-                })
-        )
-    );
+    return fetchApiStream(apis[0])
+        .catch(() => fetchApiStream(apis[1]))
+        .catch(() => fetchApiStream(apis[2]));
 };
 
 export default {
