@@ -185,7 +185,7 @@ export const handleGroupParticipants = async (sock: any, part: any) => {
             .replace(/{grupo}|@grupo|#grupo/g, groupName)
             .replace(/{desc}|@desc|#desc/g, desc);
         
-        const headerTitle = action === 'add' ? 'WELCOME' : 'GOODBYE';
+        const headerTitle = action === 'add' ? 'WELCOME' : 'GOOD BYE';
         const headerFruit = action === 'add' ? '🍒' : '🍓';
 
         const message = 
@@ -195,7 +195,7 @@ export const handleGroupParticipants = async (sock: any, part: any) => {
 𖫨𖫨🪷⃨᪲  ${userTags}
 𐴲੭  ˙ 𓂃  🍥  𓂃  ˙
 
-🍓͜ᩧ𑂳ᰍ  ${finalMsg}
+  ${finalMsg}
 
 𐴲੭  ˙ 𓂃  🍥  𓂃  ˙
 
