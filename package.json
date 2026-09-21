@@ -17,7 +17,8 @@
     "#anime": "./lib/anime.ts",
     "#logomaker": "./lib/logomaker.ts",
     "#handler": "./handler.ts",
-    "#index": "./index.ts"
+    "#index": "./index.ts",
+    "#alertas": "./lib/alertas.ts"
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
