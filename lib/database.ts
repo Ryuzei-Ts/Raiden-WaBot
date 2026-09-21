@@ -51,7 +51,9 @@ export const loadDB = () => {
             gacha INTEGER DEFAULT 1,
             economy INTEGER DEFAULT 0,
             adminonly INTEGER DEFAULT 0,
-            antilinks INTEGER DEFAULT 0
+            antilinks INTEGER DEFAULT 0,
+            sWelcome TEXT DEFAULT '',
+            sGoodbye TEXT DEFAULT ''
         );
 
         CREATE TABLE IF NOT EXISTS chat_users (
@@ -70,10 +72,13 @@ export const loadDB = () => {
         );
     `);
 
+    // Migraciones automáticas por si la tabla chats ya existía sin estas columnas
     try { db.exec("ALTER TABLE users ADD COLUMN sPack TEXT DEFAULT ''"); } catch {}
     try { db.exec("ALTER TABLE users ADD COLUMN sAuthor TEXT DEFAULT ''"); } catch {}
     try { db.exec("ALTER TABLE chats ADD COLUMN characters TEXT DEFAULT '{}'"); } catch {}
     try { db.exec("ALTER TABLE chats ADD COLUMN rolls TEXT DEFAULT '{}'"); } catch {}
+    try { db.exec("ALTER TABLE chats ADD COLUMN sWelcome TEXT DEFAULT ''"); } catch {}
+    try { db.exec("ALTER TABLE chats ADD COLUMN sGoodbye TEXT DEFAULT ''"); } catch {}
     try { db.exec("ALTER TABLE chat_users ADD COLUMN stats TEXT DEFAULT '{}'"); } catch {}
 
     stmtSaveUser = db.prepare(`
@@ -93,8 +98,8 @@ export const loadDB = () => {
     `);
 
     stmtSaveChat = db.prepare(`
-        INSERT INTO chats (id, muteds, isBanned, welcome, bye, nsfw, alerts, gacha, economy, adminonly, antilinks, characters, rolls)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO chats (id, muteds, isBanned, welcome, bye, nsfw, alerts, gacha, economy, adminonly, antilinks, characters, rolls, sWelcome, sGoodbye)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             muteds = excluded.muteds,
             isBanned = excluded.isBanned,
@@ -107,7 +112,9 @@ export const loadDB = () => {
             adminonly = excluded.adminonly,
             antilinks = excluded.antilinks,
             characters = excluded.characters,
-            rolls = excluded.rolls
+            rolls = excluded.rolls,
+            sWelcome = excluded.sWelcome,
+            sGoodbye = excluded.sGoodbye
     `);
 
     stmtSaveChatUser = db.prepare(`
@@ -145,6 +152,8 @@ export const loadDB = () => {
         chatObj.economy = Boolean(c.economy);
         chatObj.adminonly = Boolean(c.adminonly);
         chatObj.antilinks = Boolean(c.antilinks);
+        chatObj.sWelcome = c.sWelcome || '';
+        chatObj.sGoodbye = c.sGoodbye || '';
         chatObj.characters = JSON.parse(c.characters || '{}');
         chatObj.rolls = JSON.parse(c.rolls || '{}');
         chatObj.users ||= {};
@@ -203,7 +212,9 @@ export const saveDB = (chatId?: string, senderId?: string) => {
                 c.adminonly ? 1 : 0,
                 c.antilinks ? 1 : 0,
                 JSON.stringify(c.characters || {}),
-                JSON.stringify(c.rolls || {})
+                JSON.stringify(c.rolls || {}),
+                c.sWelcome || '',
+                c.sGoodbye || ''
             );
 
             if (senderId && c.users?.[senderId]) {
@@ -267,6 +278,8 @@ export const registerData = async (sock: any, m: any) => {
         chat.economy ??= false;
         chat.adminonly ??= false;
         chat.antilinks ??= false;
+        chat.sWelcome ??= '';
+        chat.sGoodbye ??= '';
 
         chat.users[sender] ||= {};
         chat.users[sender].messageCount = (chat.users[sender].messageCount || 0) + 1;
