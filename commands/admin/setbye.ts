@@ -1,7 +1,7 @@
 import { saveDB } from '#db';
 
 export default {
-    command: ['setbye'],
+    command: ['setbye', 'setdespedida'],
     description: 'Configura el texto del mensaje de despedida',
     category: 'admin',
     group: true,
@@ -34,7 +34,8 @@ export default {
         }
 
         dbData.chats[chat].sGoodbye = text;
-        saveDB(chat);
+        const senderId = m.sender?.split('@')[0] + '@s.whatsapp.net';
+        saveDB(chat, senderId);
 
         return reply(`✐ ¡El mensaje de *despedida* ha sido actualizado con éxito!`);
     }
