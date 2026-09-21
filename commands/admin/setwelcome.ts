@@ -34,7 +34,8 @@ export default {
         }
 
         dbData.chats[chat].sWelcome = text;
-        saveDB(chat);
+        const senderId = m.sender?.split('@')[0] + '@s.whatsapp.net';
+        saveDB(chat, senderId);
 
         return reply(`✐ ¡El mensaje de *bienvenida* ha sido actualizado con éxito!`);
     }
