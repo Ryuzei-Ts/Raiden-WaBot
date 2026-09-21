@@ -4,7 +4,7 @@ import config from '#config';
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const getRandomIcon = (): string => {
-    const icons = ['ꕤ', '✰', '🍒', '🍓', '𑂳ᰍ'];
+    const icons = ['ꕤ', '✰'];
     return icons[Math.floor(Math.random() * icons.length)];
 };
 
@@ -195,7 +195,7 @@ export const handleGroupParticipants = async (sock: any, part: any) => {
 𖫨𖫨🪷⃨᪲  ${userTags}
 𐴲੭  ˙ 𓂃  🍥  𓂃  ˙
 
-  ${finalMsg}
+${finalMsg}
 
 𐴲੭  ˙ 𓂃  🍥  𓂃  ˙
 
