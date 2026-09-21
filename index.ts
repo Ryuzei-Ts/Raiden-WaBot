@@ -22,6 +22,7 @@ import { loadDB } from '#db';
 import config from '#config';
 import { handler, invalidateGroupCache } from '#handler';
 import printMessageLog from './lib/printlog.ts';
+import { handleGroupAlerts, handleGroupParticipants } from '#alertas';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -238,6 +239,11 @@ async function startBot() {
         const { id, action } = update;
         invalidateGroupCache(id);
         broadcast('group_updated', { chatId: id, action });
+        await handleGroupParticipants(sock, update);
+    });
+
+    sock.ev.on('groups.update', async (updates) => {
+        await handleGroupAlerts(sock, updates);
     });
 
     sock.ev.on('connection.update', async (u) => {
