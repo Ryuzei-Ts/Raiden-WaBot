@@ -1,5 +1,28 @@
-import { prepareWAMessageMedia } from '@whiskeysockets/baileys';
 import config from '#config';
+
+const ord = ['main', 'info', 'download', 'profile', 'admin', 'stickers', 'tools', 'utils', 'fun', 'game', 'economy', 'gacha', 'anime', 'nsfw', 'otros', 'logo'];
+const idx = new Map(ord.map((c, i) => [c, i]));
+
+const emojis: { [k: string]: string } = {
+    'main': '☁️',
+    'info': '🌷',
+    'download': '🛍️',
+    'profile': '🌸',
+    'admin': '🦋',
+    'stickers': '⭐',
+    'tools': '💐',
+    'utils': '🍚',
+    'fun': '🪼',
+    'game': '🎮',
+    'economy': '🪷',
+    'gacha': '🎴',
+    'anime': '🧈',
+    'nsfw': '🍓',
+    'otros': '❀',
+    'logo': '🍰'
+};
+
+const rmore = String.fromCharCode(8206).repeat(4000);
 
 export default {
     command: ['menu', 'help', 'comandos'],
@@ -11,128 +34,83 @@ export default {
         const p = usedPrefix || prefix || config.prefix || '.';
 
         try {
-            const bannerUrl = config.banner;
-            const userName = msg.pushName || 'Usuario';
+            const url = config.banner;
+            const user = msg.pushName || 'Usuario';
             const link = 'https://ryuzei.xyz';
+            const plg = global.plugins || {};
+            const keys = Object.keys(plg);
 
-            let menu = `︶⊹︶︶୨୧︶︶⊹︶︶⊹︶︶୨୧︶︶⊹\n「 ꕤ 」 ¡Hola! *${userName}*, Soy *${config.botName}*, Aquí tienes la lista de comandos.\n> Para Ver Tu Perfil Usa *${p}perfil* 𝜗ৎ\n\n‿    ׅ   𝆬     ε❤︎︭з   𝆬     ׅ      ‿\n\nׅ  ׄ  ✿ *Modo* » Premium\nׅ  ׄ  ✿ *Desarrollador* » ${config.devName}\nׅ  ׄ  ✿ *Moneda* » ${config.coin || '¥enes'}\nׅ  ׄ  ✿ *Comandos* » ${Object.keys(global.plugins || {}).filter(name => {
-                const plugin = global.plugins[name];
-                return plugin?.command && plugin.owner !== true;
-            }).length}\nׅ  ׄ  ✿ *Link* » ${link}\n\n‿    ׅ   𝆬     ε❤︎︭з   𝆬     ׅ      ‿\n${String.fromCharCode(8206).repeat(4000)}\n\n⋆｡ﾟ☁︎ ｡° *ᴄᴏᴍ꯭ᴀ꯭ɴᴅᴏs* ﾟ｡˚₊ 𓂃\n`;
+            let tot = 0;
+            const carg = args[0]?.toLowerCase();
+            const cats: Map<string, { cmd: string[]; desc: string; usage: string; key: string }[]> = new Map();
+            const seen: Map<string, Set<string>> = new Map();
 
-            const categoryArg = args[0]?.toLowerCase();
+            for (let i = 0; i < keys.length; i++) {
+                const item = plg[keys[i]];
+                if (!item?.command || item.owner === true) continue;
+                
+                tot++;
 
-            const categories: { [key: string]: any[] } = {};
-            const plugins = global.plugins || {};
+                const cat = (item.category || 'otros').toLowerCase();
+                if (carg && cat !== carg) continue;
 
-            for (const name in plugins) {
-                const plugin = plugins[name];
-                if (!plugin?.command) continue;
-                if (plugin.owner === true) continue;
-                const cat = (plugin.category || 'otros').toLowerCase();
-                if (!categories[cat]) categories[cat] = [];
-                const aliases = Array.isArray(plugin.command) ? plugin.command : [plugin.command];
-                const uniqueAliases = [...new Set(aliases)];
-                const limitedAliases = uniqueAliases.slice(0, 2);
-                categories[cat].push({
-                    command: limitedAliases,
-                    description: plugin.description || 'Sin descripción',
-                    category: plugin.category || 'otros',
-                    usage: plugin.usage || '',
-                    allAliases: uniqueAliases
-                });
-            }
+                const ali = Array.isArray(item.command) ? item.command : [item.command];
+                const uali = Array.from(new Set(ali));
+                const k = uali.join('|');
 
-            for (const cat in categories) {
-                const uniqueCommands: any[] = [];
-                const seen = new Set();
-                for (const cmd of categories[cat]) {
-                    const key = cmd.allAliases.join('|');
-                    if (!seen.has(key)) {
-                        seen.add(key);
-                        uniqueCommands.push(cmd);
-                    }
+                if (!seen.has(cat)) {
+                    seen.set(cat, new Set());
+                    cats.set(cat, []);
                 }
-                categories[cat] = uniqueCommands;
+
+                const s = seen.get(cat)!;
+                if (!s.has(k)) {
+                    s.add(k);
+                    cats.get(cat)!.push({
+                        cmd: uali.slice(0, 2),
+                        desc: item.description || 'Sin descripción',
+                        usage: item.usage || '',
+                        key: k
+                    });
+                }
             }
 
-            if (categoryArg && !categories[categoryArg]) {
-                return msg.reply(`《✤》 La categoría *${categoryArg}* no fue encontrada.`);
+            if (carg && !cats.has(carg)) {
+                return msg.reply(`《✤》 La categoría *${carg}* no fue encontrada.`);
             }
 
-            const categoryOrder = ['main', 'info', 'download', 'profile', 'admin', 'stickers', 'tools', 'utils', 'fun', 'game', 'economy', 'gacha', 'anime', 'nsfw', 'otros', 'logo'];
-            const sortedCategories = Object.keys(categories).sort((a, b) => {
-                const indexA = categoryOrder.indexOf(a);
-                const indexB = categoryOrder.indexOf(b);
-                if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-                if (indexA !== -1) return -1;
-                if (indexB !== -1) return 1;
+            let menu = `︶⊹︶︶୨୧︶︶⊹︶︶⊹︶︶୨୧︶︶⊹\n「 ꕤ 」 ¡Hola! *${user}*, Soy *${config.botName}*, Aquí tienes la lista de comandos.\n> Para Ver Tu Perfil Usa *${p}perfil* 𝜗ৎ\n\n‿    ׅ   𝆬     ε❤︎︭з   𝆬     ׅ      ‿\n\nׅ  ׄ  ✿ *Modo* » Premium\nׅ  ׄ  ✿ *Desarrollador* » ${config.devName}\nׅ  ׄ  ✿ *Moneda* » ${config.coin || '¥enes'}\nׅ  ׄ  ✿ *Comandos* » ${tot}\nׅ  ׄ  ✿ *Link* » ${link}\n\n‿    ׅ   𝆬     ε❤︎︭з   𝆬     ׅ      ‿\n${rmore}\n\n⋆｡ﾟ☁︎ ｡° *ᴄᴏᴍ꯭ᴀ꯭ɴᴅᴏs* ﾟ｡˚₊ 𓂃\n`;
+
+            const scats = Array.from(cats.keys()).sort((a, b) => {
+                const ia = idx.has(a) ? idx.get(a)! : 999;
+                const ib = idx.has(b) ? idx.get(b)! : 999;
+                if (ia !== ib) return ia - ib;
                 return a.localeCompare(b);
             });
 
-            const categoryEmojis: { [key: string]: string } = {
-                'main': '☁️',
-                'info': '🌷',
-                'download': '🛍️',
-                'profile': '🌸',
-                'admin': '🦋',
-                'stickers': '⭐',
-                'tools': '💐',
-                'utils': '🍚',
-                'fun': '🪼',
-                'game': '🎮',
-                'economy': '🪷',
-                'gacha': '🎴',
-                'anime': '🧈',
-                'nsfw': '🍓',
-                'otros': '❀',
-                'logo': '🍰'
-            };
+            for (let i = 0; i < scats.length; i++) {
+                const c = scats[i];
+                const cmds = cats.get(c)!;
+                const cname = c.toUpperCase();
+                const cemo = emojis[c] || '✦';
 
-            for (const category of sortedCategories) {
-                if (categoryArg && category !== categoryArg) continue;
-                const cmds = categories[category];
-                const catName = category.toUpperCase();
-                const catEmoji = categoryEmojis[category] || '✦';
-                menu += `\n☕︎  𝀢  塞缪尔ᅟ֪   ﹙ *\`${catName}\`* ﹚ᅟ ㅤ✿\n\n`;
-                cmds.forEach((cmd) => {
-                    const aliases = cmd.command;
-                    const aliasesStr = aliases.map(a => `*${p}${a}*`).join(' › ');
-                    const usoText = cmd.usage ? ` + _${cmd.usage}_` : '';
-                    menu += `❀   ᠀᠀ㅤ۟ ${catEmoji}  ${aliasesStr}${usoText}\n`;
-                    menu += `> ── 𑁪ㅤׅㅤ۫  ${cmd.description}\n`;
-                });
+                menu += `\n☕︎  𝀢  塞缪尔ᅟ֪   ﹙ *\`${cname}\`* ﹚ᅟ ㅤ✿\n\n`;
+                for (let j = 0; j < cmds.length; j++) {
+                    const item = cmds[j];
+                    const astr = item.cmd.map(a => `*${p}${a}*`).join(' › ');
+                    const utxt = item.usage ? ` + _${item.usage}_` : '';
+                    menu += `❀   ᠀᠀ㅤ۟ ${cemo}  ${astr}${utxt}\n> ── 𑁪ㅤׅㅤ۫  ${item.desc}\n`;
+                }
                 menu += `\n ㅤׅㅤ۫ㅤㅤ      ﹙❀﹚ㅤׅㅤㅤ˚ㅤ\n`;
             }
 
             menu += `\n> ׅ  ׄ  ✿  Made with love by *${config.devName}*`;
 
-            const textMessage = menu;
+            const body = url 
+                ? { image: { url }, caption: menu }
+                : { text: menu };
 
-            let linkPreview = undefined;
-            if (bannerUrl) {
-                try {
-                    const media = await prepareWAMessageMedia({ image: { url: bannerUrl } }, { upload: sock.waUploadToServer, mediaTypeOverride: 'thumbnail-link' });
-                    if (media?.imageMessage) {
-                        linkPreview = {
-                            'canonical-url': link,
-                            'matched-text': link,
-                            title: config.botName,
-                            description: `Made with love by ${config.devName}`,
-                            jpegThumbnail: media.imageMessage.jpegThumbnail ? Buffer.from(media.imageMessage.jpegThumbnail) : undefined,
-                            highQualityThumbnail: media.imageMessage || undefined
-                        };
-                    }
-                } catch {}
-            }
-
-            sock.sendMessage(chat, {
-                text: textMessage,
-                linkPreview: linkPreview,
-                contextInfo: {
-                    isForwarded: false
-                }
-            }, { quoted: msg });
+            sock.sendMessage(chat, body, { quoted: msg });
 
         } catch (e: any) {
             console.error(e);
