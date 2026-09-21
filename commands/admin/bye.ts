@@ -31,7 +31,7 @@ export default {
             const estadoIcono = chatDb.bye ? '✓' : '✗';
 
             const menuText = 
-                `❒ Control de Despedida:\n\n` +
+                `❒ Un administrador puede activar o desactivar el mensaje de despedida utilizando:\n\n` +
                 `✐ _Activar_ » *${usedPrefix + command} on*\n` +
                 `✐ _Desactivar_ » *${usedPrefix + command} off*\n` +
                 `✐ _Probar mensaje_ » *${usedPrefix}testbye*\n\n` +
