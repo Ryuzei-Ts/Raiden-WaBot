@@ -81,8 +81,8 @@ export const handleGroupParticipants = async (sock: any, part: any) => {
         imageTimeout: 2000,
         maxMentions: 50,
         defaultMessages: {
-            welcome: 'Disfruta tu estadía. ૮₍ ´• ˕ •` ₎ა\n\n> ✰ Personaliza este mensaje usando: *.setwelcome*',
-            goodbye: 'A chingar su madre alv ૮꒰ ˶• ᴗ •˶꒱ა'
+            welcome: 'Disfruta tu estadía en el grupo!\n\n> ✰ Personaliza este mensaje usando: *.setwelcome*',
+            goodbye: 'A chingar su madre alv.'
         }
     };
 
