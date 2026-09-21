@@ -31,7 +31,7 @@ export default {
             const estadoIcono = chatDb.welcome ? '✓' : '✗';
 
             const menuText = 
-                `❒ Control de Bienvenida:\n\n` +
+                `❒ Un administrador puede activar o desactivar el mensaje de bienvenida utilizando:\n\n` +
                 `✐ _Activar_ » *${usedPrefix + command} on*\n` +
                 `✐ _Desactivar_ » *${usedPrefix + command} off*\n` +
                 `✐ _Probar mensaje_ » *${usedPrefix}testwelcome*\n\n` +
