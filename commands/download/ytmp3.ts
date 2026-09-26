@@ -45,7 +45,7 @@ const extractAudioUrl = (data: any): string => {
     return data?.link || data?.url || data?.downloadUrl || '';
 };
 
-const downloadAudioWithYtApi = async (videoId: string): Promise<string> => {
+const downloadAudioBuffer = async (videoId: string): Promise<Buffer> => {
     const apiKey = config.rapidapiKey || default_rapidapi_key;
     
     const options = {
@@ -69,7 +69,16 @@ const downloadAudioWithYtApi = async (videoId: string): Promise<string> => {
         throw new Error('No se pudo obtener el enlace de descarga');
     }
 
-    return downloadUrl;
+    const audioStream = await axios.get(downloadUrl, {
+        responseType: 'arraybuffer',
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Referer': 'https://www.youtube.com/'
+        },
+        timeout: 30000
+    });
+
+    return Buffer.from(audioStream.data);
 };
 
 export default {
@@ -120,12 +129,12 @@ export default {
 
             emitProgress(msgId, 'fetching_audio_stream');
 
-            const downloadUrl = await downloadAudioWithYtApi(videoId);
+            const audioBuffer = await downloadAudioBuffer(videoId);
 
             emitProgress(msgId, 'sending_audio_to_whatsapp');
             await sock.sendMessage(chat, { 
-                audio: { url: downloadUrl }, 
-                mimetype: "audio/mpeg", 
+                audio: audioBuffer, 
+                mimetype: "audio/mp4", 
                 fileName: `${title}.mp3`, 
                 ptt: false 
             }, { quoted: msg });
