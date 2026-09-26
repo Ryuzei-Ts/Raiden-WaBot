@@ -4,7 +4,7 @@ import config from '#config';
 
 const max_duration_seconds = 7 * 60;
 const default_rapidapi_key = '728011c880msh570a2698cc93fc2p152238jsn282becd2f220';
-const rapidapi_host = 'youtube-mp310.p.rapidapi.com';
+const rapidapi_host = 'yt-api.p.rapidapi.com';
 
 const cleanText = (text: any): string => {
     if (!text) return '';
@@ -24,14 +24,36 @@ const emitProgress = (msgId: string, step: string, extraData: Record<string, any
     });
 };
 
-const downloadAudioWithRapidApi = async (videoUrl: string): Promise<string> => {
+const extractAudioUrl = (data: any): string => {
+    if (data?.adaptiveFormats && Array.isArray(data.adaptiveFormats)) {
+        const audioFormats = data.adaptiveFormats.filter((f: any) => f.mimeType && f.mimeType.includes('audio'));
+        if (audioFormats.length > 0) {
+            const bestAudio = audioFormats.reduce((prev: any, curr: any) => {
+                return (curr.bitrate || 0) > (prev.bitrate || 0) ? curr : prev;
+            }, audioFormats[0]);
+            return bestAudio?.url || '';
+        }
+    }
+
+    if (data?.formats && Array.isArray(data.formats)) {
+        const audioFormats = data.formats.filter((f: any) => f.mimeType && f.mimeType.includes('audio'));
+        if (audioFormats.length > 0) {
+            return audioFormats[0]?.url || '';
+        }
+    }
+
+    return data?.link || data?.url || data?.downloadUrl || '';
+};
+
+const downloadAudioWithYtApi = async (videoId: string): Promise<string> => {
     const apiKey = config.rapidapiKey || default_rapidapi_key;
     
     const options = {
         method: 'GET',
-        url: `https://${rapidapi_host}/download/mp3`,
+        url: `https://${rapidapi_host}/dl`,
         params: {
-            url: videoUrl
+            id: videoId,
+            cgeo: 'US'
         },
         headers: {
             'x-rapidapi-key': apiKey,
@@ -41,8 +63,7 @@ const downloadAudioWithRapidApi = async (videoUrl: string): Promise<string> => {
     };
 
     const response = await axios.request(options);
-    const data = response.data;
-    const downloadUrl = data?.downloadUrl || data?.download || data?.url || data?.link || data?.result?.downloadUrl;
+    const downloadUrl = extractAudioUrl(response.data);
 
     if (!downloadUrl || typeof downloadUrl !== 'string') {
         throw new Error('No se pudo obtener el enlace de descarga');
@@ -99,7 +120,7 @@ export default {
 
             emitProgress(msgId, 'fetching_audio_stream');
 
-            const downloadUrl = await downloadAudioWithRapidApi(videoUrl);
+            const downloadUrl = await downloadAudioWithYtApi(videoId);
 
             emitProgress(msgId, 'sending_audio_to_whatsapp');
             await sock.sendMessage(chat, { 
