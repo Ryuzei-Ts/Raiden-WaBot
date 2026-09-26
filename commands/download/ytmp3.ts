@@ -33,14 +33,14 @@ const downloadAudioWithRapidApi = async (videoUrl: string): Promise<string> => {
             'x-rapidapi-key': apiKey,
             'x-rapidapi-host': rapidapi_host
         },
-        timeout: 15000
+        timeout: 20000
     });
 
     const data = response.data;
-    const downloadUrl = data?.downloadUrl || data?.link || data?.url || data?.download || data?.result?.downloadUrl;
+    const downloadUrl = data?.downloadUrl || data?.download || data?.url || data?.link || data?.result?.downloadUrl;
 
     if (!downloadUrl || typeof downloadUrl !== 'string') {
-        throw new Error('No se pudo obtener el enlace de descarga directo');
+        throw new Error('No se pudo obtener el enlace de descarga');
     }
 
     return downloadUrl;
