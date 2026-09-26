@@ -3,8 +3,8 @@ import axios from 'axios';
 import config from '#config';
 
 const max_duration_seconds = 7 * 60;
-const api_base_url = 'https://vidkraken.com/api/v2';
-const default_api_key = '2256fef5-9328-4582-8962-cb375378c8e0';
+const default_rapidapi_key = '728011c880msh570a2698cc93fc2p152238jsn282becd2f220';
+const rapidapi_host = 'youtube-mp310.p.rapidapi.com';
 
 const cleanText = (text: any): string => {
     if (!text) return '';
@@ -24,57 +24,31 @@ const emitProgress = (msgId: string, step: string, extraData: Record<string, any
     });
 };
 
-const downloadAudioWithVidkraken = async (videoUrl: string): Promise<string> => {
-    const apiKey = config.vidkrakenKey || default_api_key;
-    const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-    };
+const downloadAudioWithRapidApi = async (videoUrl: string): Promise<string> => {
+    const apiKey = config.rapidapiKey || default_rapidapi_key;
+    
+    const response = await axios.get(`https://${rapidapi_host}/download/mp3`, {
+        params: { url: videoUrl },
+        headers: {
+            'x-rapidapi-key': apiKey,
+            'x-rapidapi-host': rapidapi_host
+        },
+        timeout: 15000
+    });
 
-    const createRes = await axios.post(
-        `${api_base_url}/download`,
-        { url: videoUrl, format: 'mp3' },
-        { headers, timeout: 15000 }
-    );
+    const data = response.data;
+    const downloadUrl = data?.downloadUrl || data?.link || data?.url || data?.download || data?.result?.downloadUrl;
 
-    const { jobId, downloadUrl, status } = createRes.data || {};
-
-    if (status === 'COMPLETED' && downloadUrl) {
-        return downloadUrl;
+    if (!downloadUrl || typeof downloadUrl !== 'string') {
+        throw new Error('No se pudo obtener el enlace de descarga directo');
     }
 
-    if (!jobId) {
-        throw new Error('No se pudo iniciar el proceso de descarga en VidKraken');
-    }
-
-    const maxRetries = 20;
-    const delayMs = 3000;
-
-    for (let i = 0; i < maxRetries; i++) {
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-
-        const statusRes = await axios.get(`${api_base_url}/download/${jobId}`, {
-            headers,
-            timeout: 10000
-        });
-
-        const jobData = statusRes.data || {};
-
-        if (jobData.status === 'COMPLETED' && jobData.downloadUrl) {
-            return jobData.downloadUrl;
-        }
-
-        if (jobData.status === 'FAILED') {
-            throw new Error(jobData.errorCode || 'Error en el procesamiento de VidKraken');
-        }
-    }
-
-    throw new Error('El tiempo de espera de descarga con VidKraken ha expirado');
+    return downloadUrl;
 };
 
 export default {
     command: ['yta', 'ytmp3'],
-    description: 'Descarga y envía audio de YouTube utilizando VidKraken.',
+    description: 'Descarga y envía audio de YouTube.',
     category: 'download',
     group: true,
     run: async (ctx: any) => {
@@ -114,13 +88,13 @@ export default {
             }
 
             const mqThumbUrl = `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`;
-            const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Canal* » ${channel}\nׅ  ׄ  ✿ *Vistas* » ${formatViews(views)}\nׅ  ׄ  ✿ *Tiempo* » ${duration}\nׅ  ׄ  ✿ *Link* » ${videoUrl}\n\nׅ  ׄ  ✿ *Descargando audio (VidKraken)...*`;
+            const caption = `﹒𝜗ৎ      ࣪  *${title}*\n\nׅ  ׄ  ✿ *Canal* » ${channel}\nׅ  ׄ  ✿ *Vistas* » ${formatViews(views)}\nׅ  ׄ  ✿ *Tiempo* » ${duration}\nׅ  ׄ  ✿ *Link* » ${videoUrl}\n\nׅ  ׄ  ✿ *Descargando audio...*`;
 
             sock.sendMessage(chat, { image: { url: mqThumbUrl }, caption }, { quoted: msg }).catch(() => {});
 
             emitProgress(msgId, 'fetching_audio_stream');
 
-            const downloadUrl = await downloadAudioWithVidkraken(videoUrl);
+            const downloadUrl = await downloadAudioWithRapidApi(videoUrl);
 
             emitProgress(msgId, 'sending_audio_to_whatsapp');
             await sock.sendMessage(chat, { 
@@ -133,7 +107,7 @@ export default {
         } catch (error: any) {
             console.error('Error en comando ytmp3/yta:', error?.message || error);
             sock.sendMessage(chat, { 
-                text: `   ׄ  ✿ Ocurrió un error al procesar la descarga con VidKraken.` 
+                text: `   ׄ  ✿ Ocurrió un error al procesar la descarga del audio.` 
             }, { quoted: msg });
         }
     }
