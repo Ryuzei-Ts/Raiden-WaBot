@@ -27,15 +27,20 @@ const emitProgress = (msgId: string, step: string, extraData: Record<string, any
 const downloadAudioWithRapidApi = async (videoUrl: string): Promise<string> => {
     const apiKey = config.rapidapiKey || default_rapidapi_key;
     
-    const response = await axios.get(`https://${rapidapi_host}/download/mp3`, {
-        params: { url: videoUrl },
+    const options = {
+        method: 'GET',
+        url: `https://${rapidapi_host}/download/mp3`,
+        params: {
+            url: videoUrl
+        },
         headers: {
             'x-rapidapi-key': apiKey,
             'x-rapidapi-host': rapidapi_host
         },
         timeout: 20000
-    });
+    };
 
+    const response = await axios.request(options);
     const data = response.data;
     const downloadUrl = data?.downloadUrl || data?.download || data?.url || data?.link || data?.result?.downloadUrl;
 
@@ -63,7 +68,7 @@ export default {
         emitProgress(msgId, 'search_started', { query });
 
         const urlMatch = query.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/|v\/))([a-zA-Z0-9_-]{11})/);
-        const searchQuery = urlMatch ? `https://youtu.be/${urlMatch[1]}` : query;
+        const searchQuery = urlMatch ? `https://www.youtube.com/watch?v=${urlMatch[1]}` : query;
 
         try {
             const searchResult = await yts(searchQuery);
@@ -75,7 +80,7 @@ export default {
 
             const video = searchResult.videos[0];
             const videoId = video.videoId || (urlMatch ? urlMatch[1] : '');
-            const videoUrl = `https://youtu.be/${videoId}`;
+            const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
             const title = cleanText(video.title) || 'Sin título';
             const channel = cleanText(video.author?.name || video.author) || "Desconocido";
             const views = typeof video.views === 'number' ? video.views : 0;
