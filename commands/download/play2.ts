@@ -6,7 +6,6 @@ import config from '#config';
 const cache = new LRUCache<string, any>({ max: 100, ttl: 3600000 });
 const downloadCache = new LRUCache<string, string>({ max: 50, ttl: 120000 });
 
-const LEMPI_KEYS = ['lem488', 'Midnight1', 'Midnight', 'lem691', 'lem678'];
 const MAX_DURATION_SECONDS = 7 * 60;
 const MAX_FILE_SIZE_BYTES = 30 * 1024 * 1024;
 
@@ -53,13 +52,13 @@ const getBuffer = async (url: string, timeoutMs = 60000): Promise<Buffer> => {
 };
 
 const extractVideoUrl = (data: any): string => {
-    const candidate = data?.data?.dl_url || 
+    const candidate = data?.data?.download || 
+                      data?.data?.dl_url || 
                       data?.url || 
                       data?.dl || 
                       data?.datos?.url || 
                       data?.result?.download || 
                       data?.result?.url || 
-                      data?.data?.download || 
                       (typeof data?.download === 'object' ? data?.download?.url : data?.download);
 
     if (!candidate || typeof candidate !== 'string' || !candidate.startsWith('http')) {
@@ -74,33 +73,21 @@ const getVideoDownloadUrl = async (link: string, msgId?: string): Promise<string
     if (cached) return cached;
 
     const encoded = encodeURIComponent(link);
-    let lastError = '';
+    const api = `https://api.ryuzei.xyz/download/ytvideo?url=${encoded}`;
 
-    const apis = [
-        `https://api.starlights.uk/api/download/ytmp4?url=${encoded}`,
-        `https://api.starlights.uk/api/download/ytmp4v3?url=${encoded}&quality=1080p`,
-        `https://api.lempi.lat/dl/ytv?url=${encoded}&apikey=${LEMPI_KEYS[0]}`
-    ];
+    if (msgId) emitProgress(msgId, 'requesting_api', { apiIndex: 1, totalApis: 1 });
 
-    for (let i = 0; i < apis.length; i++) {
-        const api = apis[i];
-        if (msgId) emitProgress(msgId, 'requesting_api', { apiIndex: i + 1, totalApis: apis.length });
-        try {
-            const res = await axios.get(api, {
-                timeout: 20000,
-                headers: {
-                    "User-Agent": "Mozilla/5.0 (Linux; Android 15; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-                    "Accept": "application/json"
-                }
-            });
-            const dlUrl = extractVideoUrl(res.data);
-            downloadCache.set(cacheKey, dlUrl);
-            return dlUrl;
-        } catch (err: any) {
-            lastError = err.message || String(err);
+    const res = await axios.get(api, {
+        timeout: 20000,
+        headers: {
+            "User-Agent": "Mozilla/5.0 (Linux; Android 15; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+            "Accept": "application/json"
         }
-    }
-    throw new Error(`APIs inaccesibles: ${lastError}`);
+    });
+
+    const dlUrl = extractVideoUrl(res.data);
+    downloadCache.set(cacheKey, dlUrl);
+    return dlUrl;
 };
 
 export default {
