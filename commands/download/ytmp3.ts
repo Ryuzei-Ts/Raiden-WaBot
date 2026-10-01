@@ -1,10 +1,7 @@
 import yts from 'yt-search';
 import axios from 'axios';
-import config from '#config';
 
 const max_duration_seconds = 7 * 60;
-const default_rapidapi_key = '728011c880msh570a2698cc93fc2p152238jsn282becd2f220';
-const rapidapi_host = 'yt-api.p.rapidapi.com';
 
 const cleanText = (text: any): string => {
     if (!text) return '';
@@ -13,10 +10,12 @@ const cleanText = (text: any): string => {
     return String(text).trim();
 };
 
-const formatViews = (v: number) => 
-    v >= 1e9 ? (v / 1e9).toFixed(1) + 'B' : 
-    v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : 
-    v >= 1e3 ? (v / 1e3).toFixed(1) + 'K' : String(v);
+const formatViews = (v: number | string) => {
+    if (typeof v === 'string') return v;
+    return v >= 1e9 ? (v / 1e9).toFixed(1) + 'B' : 
+           v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : 
+           v >= 1e3 ? (v / 1e3).toFixed(1) + 'K' : String(v);
+};
 
 const emitProgress = (msgId: string, step: string, extraData: Record<string, any> = {}) => {
     queueMicrotask(() => {
@@ -24,49 +23,31 @@ const emitProgress = (msgId: string, step: string, extraData: Record<string, any
     });
 };
 
-const extractAudioUrl = (data: any): string => {
-    if (data?.adaptiveFormats && Array.isArray(data.adaptiveFormats)) {
-        const audioFormats = data.adaptiveFormats.filter((f: any) => f.mimeType && f.mimeType.includes('audio'));
-        if (audioFormats.length > 0) {
-            const bestAudio = audioFormats.reduce((prev: any, curr: any) => {
-                return (curr.bitrate || 0) > (prev.bitrate || 0) ? curr : prev;
-            }, audioFormats[0]);
-            return bestAudio?.url || '';
+const downloadAudioBuffer = async (videoUrl: string): Promise<Buffer> => {
+    const apis = [
+        `https://api.ryuzei.xyz/download/ytmp3/v3?url=${encodeURIComponent(videoUrl)}`,
+        `https://api.ryuzei.xyz/download/ytmp3?url=${encodeURIComponent(videoUrl)}`,
+        `https://api.ryuzei.xyz/download/ytmp3/v2?url=${encodeURIComponent(videoUrl)}`
+    ];
+
+    let downloadUrl = '';
+
+    for (const apiUrl of apis) {
+        try {
+            const response = await axios.get(apiUrl, { timeout: 15000 });
+            const resData = response.data;
+
+            if (resData?.status && resData?.data?.download) {
+                downloadUrl = resData.data.download;
+                break;
+            }
+        } catch (err) {
+            continue;
         }
     }
 
-    if (data?.formats && Array.isArray(data.formats)) {
-        const audioFormats = data.formats.filter((f: any) => f.mimeType && f.mimeType.includes('audio'));
-        if (audioFormats.length > 0) {
-            return audioFormats[0]?.url || '';
-        }
-    }
-
-    return data?.link || data?.url || data?.downloadUrl || '';
-};
-
-const downloadAudioBuffer = async (videoId: string): Promise<Buffer> => {
-    const apiKey = config.rapidapiKey || default_rapidapi_key;
-    
-    const options = {
-        method: 'GET',
-        url: `https://${rapidapi_host}/dl`,
-        params: {
-            id: videoId,
-            cgeo: 'US'
-        },
-        headers: {
-            'x-rapidapi-key': apiKey,
-            'x-rapidapi-host': rapidapi_host
-        },
-        timeout: 20000
-    };
-
-    const response = await axios.request(options);
-    const downloadUrl = extractAudioUrl(response.data);
-
-    if (!downloadUrl || typeof downloadUrl !== 'string') {
-        throw new Error('No se pudo obtener el enlace de descarga');
+    if (!downloadUrl) {
+        throw new Error('No se pudo obtener el enlace de descarga de ninguna de las APIs');
     }
 
     const audioStream = await axios.get(downloadUrl, {
@@ -75,7 +56,7 @@ const downloadAudioBuffer = async (videoId: string): Promise<Buffer> => {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Referer': 'https://www.youtube.com/'
         },
-        timeout: 30000
+        timeout: 40000
     });
 
     return Buffer.from(audioStream.data);
@@ -87,7 +68,7 @@ export default {
     category: 'download',
     group: true,
     run: async (ctx: any) => {
-        const { sock, msg, chat, args, usedPrefix, prefix } = ctx;
+        const { sock, msg, chat, args } = ctx;
         const msgId = msg?.id || msg?.key?.id;
 
         const query = args.join(" ").trim();
@@ -113,7 +94,7 @@ export default {
             const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
             const title = cleanText(video.title) || 'Sin título';
             const channel = cleanText(video.author?.name || video.author) || "Desconocido";
-            const views = typeof video.views === 'number' ? video.views : 0;
+            const views = video.views ?? 0;
             const duration = cleanText(video.timestamp || video.duration) || "";
 
             if (video.seconds && video.seconds > max_duration_seconds) {
@@ -129,7 +110,7 @@ export default {
 
             emitProgress(msgId, 'fetching_audio_stream');
 
-            const audioBuffer = await downloadAudioBuffer(videoId);
+            const audioBuffer = await downloadAudioBuffer(videoUrl);
 
             emitProgress(msgId, 'sending_audio_to_whatsapp');
             await sock.sendMessage(chat, { 
