@@ -46,9 +46,9 @@ const fetchApiUrl = (apiUrl: string): Promise<string> => {
 const getAudioUrlWithRetry = (videoUrl: string): Promise<string> => {
     const encoded = encodeURIComponent(videoUrl);
     const apis = [
-        `https://api.delirius.online/download/ytmp3?url=${encoded}`,
-        `https://api.starlights.uk/api/download/ytmp3?url=${encoded}`,
-        `https://api.starlights.uk/api/download/ytmp3v2?url=${encoded}`
+        `https://api.ryuzei.xyz/download/ytmp3/v4?url=${encoded}`,
+        `https://api.ryuzei.xyz/download/ytmp3/v2?url=${encoded}`,
+        `https://api.ryuzei.xyz/download/ytmp3/v3?url=${encoded}`
     ];
 
     return fetchApiUrl(apis[0])
