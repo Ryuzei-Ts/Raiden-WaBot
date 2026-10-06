@@ -31,7 +31,7 @@ export default {
             const realSender = await UserJid(sock, chat, sender);
             const user = global.db.data.users[realSender] || {};
             const isVideo = command === 'bratv';
-            const endpoint = isVideo ? `https://api.delirius.online/canvas/bratvideo?text=${encodeURIComponent(query)}` : `https://api.delirius.online/canvas/brat?text=${encodeURIComponent(query)}`;
+            const endpoint = isVideo ? `https://api.ryuzei.xyz/canvas/bratvid?text=${encodeURIComponent(query)}` : `https://api.ryuzei.xyz/canvas/brat?text=${encodeURIComponent(query)}`;
             const response = await fetch(endpoint);
             if (!response.ok) return sendReply(`✿ Error al generar el ${isVideo ? 'video' : 'imagen'} BRAT.`);
             const arrayBuffer = await response.arrayBuffer();
